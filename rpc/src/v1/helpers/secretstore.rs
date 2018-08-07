@@ -47,21 +47,18 @@ pub fn generate_document_key(account_public: Public, server_key_public: Public) 
 }
 
 /// Encrypt document with distributely generated key.
-pub fn encrypt_document(key: Bytes, document: Bytes) -> Result<Bytes, Error> {
+pub fn encrypt_document(key: Bytes, mut document: Bytes) -> Result<Bytes, Error> {
 	// make document key
 	let key = into_document_key(key)?;
 
 	// use symmetric encryption to encrypt document
 	let iv = initialization_vector();
-	let mut encrypted_document = vec![0; document.len() + iv.len()];
-	{
-		let (mut encryption_buffer, iv_buffer) = encrypted_document.split_at_mut(document.len());
 
-		crypto::aes::encrypt_128_ctr(&key, &iv, &document, &mut encryption_buffer).map_err(errors::encryption)?;
-		iv_buffer.copy_from_slice(&iv);
-	}
+  crypto::aes::inplace_encrypt_128_ctr(&key, &iv, &mut document[..]).map_err(errors::encryption)?;
+  document.extend_from_slice(&iv);
 
-	Ok(encrypted_document)
+	Ok(document)
+
 }
 
 /// Decrypt document with distributely generated key.
@@ -77,10 +74,11 @@ pub fn decrypt_document(key: Bytes, mut encrypted_document: Bytes) -> Result<Byt
 
 	// use symmetric decryption to decrypt document
 	let iv = encrypted_document.split_off(encrypted_document_len - INIT_VEC_LEN);
-	let mut document = vec![0; encrypted_document_len - INIT_VEC_LEN];
-	crypto::aes::decrypt_128_ctr(&key, &iv, &encrypted_document, &mut document).map_err(errors::encryption)?;
 
-	Ok(document)
+	crypto::aes::inplace_decrypt_128_ctr(&key, &iv, &mut encrypted_document[..]).map_err(errors::encryption)?;
+
+	Ok(encrypted_document)
+ 
 }
 
 /// Decrypt document given secret shadow.

@@ -67,7 +67,6 @@ extern crate ethereum_types;
 extern crate parking_lot;
 extern crate mio;
 extern crate tiny_keccak;
-extern crate crypto as rcrypto;
 extern crate rand;
 extern crate ansi_term; //TODO: remove this
 extern crate rustc_hex;

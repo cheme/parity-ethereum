@@ -12,7 +12,9 @@ mio = "0.6.8"
 bytes = "0.4"
 rand = "0.4"
 tiny-keccak = "1.4"
-rust-crypto = "0.2.34"
+#aes-ctr = "0.1.0"
+#block-modes = "0.1.0"
+#aes = "0.2.0"
 slab = "0.2"
 igd = "0.7"
 libc = "0.2.7"
@@ -21,7 +23,8 @@ ansi_term = "0.10"
 rustc-hex = "1.0"
 ethcore-io = { path = "../io", features = ["mio"] }
 parity-bytes = { git = "https://github.com/paritytech/parity-common" }
-parity-crypto = { git = "https://github.com/paritytech/parity-common" }
+#parity-crypto = { git = "https://github.com/paritytech/parity-common" }
+parity-crypto = { path = "../../../../parity-common/parity-crypto" }
 ethcore-logger = { path ="../../logger" }
 ethcore-network = { path = "../network" }
 ethereum-types = "0.3"
