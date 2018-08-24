@@ -17,6 +17,7 @@
 use std::{str, fs, fmt};
 use std::time::Duration;
 
+use plugin::{PLUGINS,ParityPlugin,Plugin};
 use ethcore::client::Mode;
 use ethcore::ethereum;
 use ethcore::spec::{Spec, SpecParams};
@@ -39,11 +40,12 @@ pub enum SpecType {
 	Olympic,
 	Classic,
 	Expanse,
-	Musicoin,
 	Ellaism,
 	Easthub,
 	Social,
 	Dev,
+  //Plugin(&'static str), // TODO replace &str by Box<Plugin> ?? just clone it then no lock
+  Plugin(Plugin), // TODO replace &str by Box<Plugin> ?? just clone it then no lock
 	Custom(String),
 }
 
@@ -66,11 +68,14 @@ impl str::FromStr for SpecType {
 			"tobalaba" => SpecType::Tobalaba,
 			"olympic" => SpecType::Olympic,
 			"expanse" => SpecType::Expanse,
-			"musicoin" => SpecType::Musicoin,
 			"ellaism" => SpecType::Ellaism,
 			"easthub" => SpecType::Easthub,
 			"social" => SpecType::Social,
 			"dev" => SpecType::Dev,
+      other if { PLUGINS.lock().has_plugin(other) } => SpecType::Plugin(
+          //PLUGINS.lock().get_plugin(other).expect("qed").get_name()
+          PLUGINS.lock().get_plugin(other).expect("qed").clone()
+        ), 
 			other => SpecType::Custom(other.into()),
 		};
 		Ok(spec)
@@ -86,13 +91,13 @@ impl fmt::Display for SpecType {
 			SpecType::Olympic => "olympic",
 			SpecType::Classic => "classic",
 			SpecType::Expanse => "expanse",
-			SpecType::Musicoin => "musicoin",
 			SpecType::Ellaism => "ellaism",
 			SpecType::Easthub => "easthub",
 			SpecType::Social => "social",
 			SpecType::Kovan => "kovan",
 			SpecType::Tobalaba => "tobalaba",
 			SpecType::Dev => "dev",
+			SpecType::Plugin(ref plugin) => plugin.get_name(),
 			SpecType::Custom(ref custom) => custom,
 		})
 	}
@@ -108,13 +113,13 @@ impl SpecType {
 			SpecType::Olympic => Ok(ethereum::new_olympic(params)),
 			SpecType::Classic => Ok(ethereum::new_classic(params)),
 			SpecType::Expanse => Ok(ethereum::new_expanse(params)),
-			SpecType::Musicoin => Ok(ethereum::new_musicoin(params)),
 			SpecType::Ellaism => Ok(ethereum::new_ellaism(params)),
 			SpecType::Easthub => Ok(ethereum::new_easthub(params)),
 			SpecType::Social => Ok(ethereum::new_social(params)),
 			SpecType::Tobalaba => Ok(ethereum::new_tobalaba(params)),
 			SpecType::Kovan => Ok(ethereum::new_kovan(params)),
 			SpecType::Dev => Ok(Spec::new_instant()),
+			SpecType::Plugin(ref plugin) => plugin.get_spec(params),
 			SpecType::Custom(ref filename) => {
 				let file = fs::File::open(filename).map_err(|e| format!("Could not load specification file at {}: {}", filename, e))?;
 				Spec::load(params, file)
@@ -126,7 +131,7 @@ impl SpecType {
 		match *self {
 			SpecType::Classic => Some("classic".to_owned()),
 			SpecType::Expanse => Some("expanse".to_owned()),
-			SpecType::Musicoin => Some("musicoin".to_owned()),
+			SpecType::Plugin(ref plugin) => plugin.get_legacy_fork_name(),
 			_ => None,
 		}
 	}

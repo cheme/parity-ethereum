@@ -16,6 +16,7 @@
 
 //! Parameters for a block chain.
 
+use parity_plugin::plugin::{PLUGINS,ParityPlugin,Plugin};
 use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::Path;
@@ -574,10 +575,10 @@ impl Spec {
 		engine_spec: ethjson::spec::Engine,
 		params: CommonParams,
 		builtins: BTreeMap<Address, Builtin>,
-	) -> Arc<EthEngine> {
+	) -> Arc<dyn EthEngine> {
 		let machine = Self::machine(&engine_spec, params, builtins);
 
-		match engine_spec {
+		let mut engine : Arc<dyn EthEngine> = match engine_spec {
 			ethjson::spec::Engine::Null(null) => Arc::new(NullEngine::new(null.params.into(), machine)),
 			ethjson::spec::Engine::Ethash(ethash) => Arc::new(::ethereum::Ethash::new(spec_params.cache_dir, ethash.params.into(), machine, spec_params.optimization_setting)),
 			ethjson::spec::Engine::InstantSeal => Arc::new(InstantSeal::new(machine)),
@@ -586,7 +587,13 @@ impl Spec {
 				.expect("Failed to start AuthorityRound consensus engine."),
 			ethjson::spec::Engine::Tendermint(tendermint) => Tendermint::new(tendermint.params.into(), machine)
 				.expect("Failed to start the Tendermint consensus engine."),
-		}
+		};
+
+    for p in PLUGINS.lock().iter() {
+      engine = p.overload_engine(engine)
+    }
+    engine
+
 	}
 
 	// given a pre-constructor state, run all the given constructors and produce a new state and

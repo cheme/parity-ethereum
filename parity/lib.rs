@@ -21,6 +21,8 @@
 extern crate ansi_term;
 extern crate docopt;
 #[macro_use]
+extern crate lazy_static;
+#[macro_use]
 extern crate clap;
 extern crate dir;
 extern crate env_logger;
@@ -109,6 +111,7 @@ mod upgrade;
 mod user_defaults;
 mod whisper;
 mod db;
+mod plugin;
 
 use std::io::BufReader;
 use std::fs::File;

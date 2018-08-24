@@ -2013,6 +2013,7 @@ dependencies = [
  "keccak-hash 0.1.2 (git+https://github.com/paritytech/parity-common)",
  "kvdb 0.1.0 (git+https://github.com/paritytech/parity-common)",
  "kvdb-rocksdb 0.1.0 (git+https://github.com/paritytech/parity-common)",
+ "lazy_static 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "mem 0.1.0",
  "migration-rocksdb 0.1.0",

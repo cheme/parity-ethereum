@@ -7,6 +7,7 @@ license = "GPL-3.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 
 [dependencies]
+lazy_static = "1.0"
 blooms-db = { path = "util/blooms-db" }
 log = "0.4"
 env_logger = "0.5"
