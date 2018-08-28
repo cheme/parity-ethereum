@@ -28,7 +28,6 @@ const ERROR_MSG: &'static str = "Failed to generate metadata files";
 
 fn main() {
 	vergen(OutputFns::all()).expect(ERROR_MSG);
-
 	let version = rustc_version::version().expect(ERROR_MSG);
 
 	let cargo: toml::Value = toml::from_str(include_str!("./Cargo.toml")).expect(ERROR_MSG);
@@ -47,6 +46,7 @@ fn main() {
 		track = track,
 		version = version,
 	));
+  println!("cargo:rustc-cfg=callisto");
 }
 
 fn create_file(filename: &str, data: String) {

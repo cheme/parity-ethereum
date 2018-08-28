@@ -19,7 +19,7 @@ mod usage;
 mod presets;
 
 
-use plugin::{PLUGINS,ParityPlugin,Plugin};
+use plugin::{PLUGINS_JSON_CHAIN};
 
 usage! {
 	{
@@ -292,7 +292,7 @@ usage! {
 
 			ARG arg_chain: (String) = "foundation", or |c: &Config| c.parity.as_ref()?.chain.clone(),
 			"--chain=[CHAIN]",
-			"Specify the blockchain type. CHAIN may be either a JSON chain specification file or olympic, frontier, homestead, mainnet, morden, ropsten, classic, expanse, tobalaba, ellaism, easthub, social, testnet, kovan, ".to_string() + &{ PLUGINS.lock().list_plugins() }[..] + " or dev.",
+			"Specify the blockchain type. CHAIN may be either a JSON chain specification file or olympic, frontier, homestead, mainnet, morden, ropsten, classic, expanse, tobalaba, ellaism, easthub, social, testnet, kovan, ".to_string() + &{ PLUGINS_JSON_CHAIN.lock().list_plugins() }[..] + " or dev.",
 
 			ARG arg_keys_path: (String) = "$BASE/keys", or |c: &Config| c.parity.as_ref()?.keys_path.clone(),
 			"--keys-path=[PATH]",

@@ -1,7 +1,7 @@
 
 use super::ParityPlugin;
-use super::Plugin;
-use std::io::Read;
+use super::ParityPluginJsonChain;
+use super::PluginJsonChain;
 
 use ethcore::spec::{Spec, SpecParams};
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -13,6 +13,8 @@ impl ParityPlugin for Musicoin {
   fn get_name (&self) -> &'static str {
     "musicoin"
   }
+}
+impl ParityPluginJsonChain for Musicoin {
 
   fn is_legacy(&self) -> bool {
     true
@@ -23,8 +25,8 @@ impl ParityPlugin for Musicoin {
   	Spec::load(params, &include_bytes!("../../ethcore/res/ethereum/musicoin.json")[..])
   }
 
-  fn clone_plugin(&self) -> Plugin {
-    Plugin(Box::new(self.clone()))
+  fn clone_plugin(&self) -> PluginJsonChain {
+    PluginJsonChain(Box::new(self.clone()))
   }
 }
 

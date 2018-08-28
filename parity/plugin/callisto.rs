@@ -1,7 +1,8 @@
 
 use super::ParityPlugin;
-use super::Plugin;
-use std::io::Read;
+use super::ParityPluginJsonChain;
+use super::PluginJsonChain;
+
 
 use ethcore::spec::{ Spec, SpecParams };
 
@@ -42,6 +43,10 @@ impl ParityPlugin for Callisto {
     "callisto"
   }
 
+}
+
+impl ParityPluginJsonChain for Callisto {
+
   fn is_legacy(&self) -> bool {
     true
   }
@@ -51,8 +56,8 @@ impl ParityPlugin for Callisto {
     Spec::load(params, &include_bytes!("../../ethcore/res/ethereum/callisto.json")[..])
   }
 
-  fn clone_plugin(&self) -> Plugin {
-    Plugin(Box::new(self.clone()))
+  fn clone_plugin(&self) -> PluginJsonChain {
+    PluginJsonChain(Box::new(self.clone()))
   }
 }
 

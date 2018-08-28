@@ -17,7 +17,7 @@
 use std::{str, fs, fmt};
 use std::time::Duration;
 
-use plugin::{PLUGINS,ParityPlugin,Plugin};
+use plugin::{PLUGINS_JSON_CHAIN,ParityPlugin,PluginJsonChain};
 use ethcore::client::Mode;
 use ethcore::ethereum;
 use ethcore::spec::{Spec, SpecParams};
@@ -44,8 +44,8 @@ pub enum SpecType {
 	Easthub,
 	Social,
 	Dev,
-  //Plugin(&'static str), // TODO replace &str by Box<Plugin> ?? just clone it then no lock
-  Plugin(Plugin), // TODO replace &str by Box<Plugin> ?? just clone it then no lock
+  //Plugin(&'static str),
+  Plugin(PluginJsonChain), // TODO replace &str by Box<Plugin> ?? just clone it then no lock
 	Custom(String),
 }
 
@@ -72,10 +72,9 @@ impl str::FromStr for SpecType {
 			"easthub" => SpecType::Easthub,
 			"social" => SpecType::Social,
 			"dev" => SpecType::Dev,
-      other if { PLUGINS.lock().has_plugin(other) } => SpecType::Plugin(
-          //PLUGINS.lock().get_plugin(other).expect("qed").get_name()
-          PLUGINS.lock().get_plugin(other).expect("qed").clone()
-        ), 
+      other if { PLUGINS_JSON_CHAIN.lock().has_plugin(other) } => SpecType::Plugin(
+          PLUGINS_JSON_CHAIN.lock().get_plugin(other).expect("qed").clone()
+      ),
 			other => SpecType::Custom(other.into()),
 		};
 		Ok(spec)

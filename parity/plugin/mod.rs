@@ -2,62 +2,65 @@
 /// first step is not plugin but grouping all interaction from ext chain under a single trait
 /// implementation.
 ///
+///
+#[cfg(any(not(feature="no-default"),feature="musicoin"))]
 mod musicoin;
+#[cfg(any(not(feature="no-default"),feature="callisto"))]
 mod callisto;
 
-use engines::{EthEngine};
 use ethcore::spec::{Spec, SpecParams};
 use parking_lot::Mutex;
 use std::fmt::{ Debug, Formatter, Result as FmtResult };
 use std::ops::{ Deref, DerefMut };
-pub struct Plugin(Box<dyn ParityPlugin>);
 
-impl Deref for Plugin {
-  type Target = Box<dyn ParityPlugin>;
-  fn deref(&self) -> &Box<dyn ParityPlugin> {
+pub struct PluginJsonChain(Box<dyn ParityPluginJsonChain>);
+
+impl Deref for PluginJsonChain {
+  type Target = Box<dyn ParityPluginJsonChain>;
+  fn deref(&self) -> &Box<dyn ParityPluginJsonChain> {
     &self.0
   }
 }
-impl DerefMut for Plugin {
-  fn deref_mut(&mut self) -> &mut Box<dyn ParityPlugin> {
+
+impl ParityPlugin for PluginJsonChain {
+  fn get_name(&self) -> &'static str {
+    self.0.get_name()
+  }
+}
+
+impl DerefMut for PluginJsonChain {
+  fn deref_mut(&mut self) -> &mut Box<dyn ParityPluginJsonChain> {
     &mut self.0
   }
 }
 
-impl PartialEq for Plugin {
-  fn eq(&self, other: &Plugin) -> bool {
-    self.same_plugin(other)
+impl PartialEq for PluginJsonChain {
+  fn eq(&self, other: &PluginJsonChain) -> bool {
+    same_plugin(self, other)
   }
 }
 
-impl Debug for Plugin {
+impl Debug for PluginJsonChain {
   fn fmt(&self, f: &mut Formatter) -> FmtResult {
     self.get_name().fmt(f)
   }
 }
 
-impl Clone for Plugin {
-  fn clone(&self) -> Plugin {
+impl Clone for PluginJsonChain {
+  fn clone(&self) -> PluginJsonChain {
     self.clone_plugin()
   }
 }
-pub struct Plugins {
-  plugins : Vec<Plugin>,
+pub struct Plugins<P> {
+  plugins : Vec<P>,
 }
 
-impl Plugins {
-  pub fn new() -> Plugins {
-    let mut plugins : Vec<Plugin> = Vec::new();
-    plugins.push(Plugin(Box::new(musicoin::Musicoin)));
-    Plugins {
-      plugins : plugins,
-    }
-  }
+impl<P : ParityPlugin> Plugins<P> {
   pub fn has_plugin(&self, name : &str) -> bool {
     self.plugins.iter().any(|p| p.get_name() == name)
   }
 
-  pub fn get_plugin(&self, name : &str) -> Option<&Plugin> {
+  pub fn get_plugin(&self, name : &str) -> Option<&P> {
     self.plugins.iter().find(|p| p.get_name() == name)
   }
   pub fn list_plugins(&self) -> String {
@@ -67,40 +70,54 @@ impl Plugins {
       res.push_str(p.get_name());
       res.push_str(", ");
     }
-    let n_end = res.len() - 2;
-    res.truncate(n_end);
+    if res.len() > 2 {
+      let n_end = res.len() - 2;
+      res.truncate(n_end);
+    }
 
     res
   }
-
-
 }
 
-/// for now stateless plugin that will be clone to reduce need to sync
-/// Might need to have another type that is sync if trait require to keep a state
-/// Note that a subtrait would be good ( with no &self in parameter) and make this one private
-pub trait ParityPlugin : Send + Debug {
+impl Plugins<PluginJsonChain> {
+  pub fn new() -> Plugins<PluginJsonChain> {
+    let mut plugins : Vec<PluginJsonChain> = Vec::new();
 
+    #[cfg(any(not(feature="no-default"),feature="musicoin"))]
+    plugins.push(PluginJsonChain(Box::new(musicoin::Musicoin)));
+    #[cfg(any(not(feature="no-default"),feature="callisto"))]
+    plugins.push(PluginJsonChain(Box::new(callisto::Callisto::new())));
+    Plugins {
+      plugins : plugins,
+    }
+  }
+}
+
+/// Stateless plugin that will be clone to reduce need to sync.
+/// For a statefull one, it is up to the implementor to embed it in a clonable sync struct in an
+/// Arc.
+pub trait ParityPlugin : Send + Debug {
   /// associated chain name
   fn get_name(&self) -> &'static str;
+}
+fn same_plugin<P1 : ParityPlugin, P2 : ParityPlugin> (p1 : &P1, p2 : &P2 ) -> bool {
+    p1.get_name() == p2.get_name()
+}
+
+/// This plugin address only the inclusion of a json chain description
+/// TODO change wording and rename clone_plugin to `new_handle` or something like that
+pub trait ParityPluginJsonChain : ParityPlugin {
+  fn clone_plugin(&self) -> PluginJsonChain;
   fn is_legacy(&self) -> bool;
   fn get_legacy_fork_name(&self) -> Option<String> { 
     if self.is_legacy() { Some(self.get_name().to_string()) } else { None }
   }
-  fn clone_plugin(&self) -> Plugin;
   fn get_spec(&self, params : SpecParams ) -> Result<Spec, String>;
-  fn same_plugin(&self, o : &Plugin) -> bool {
-    self.get_name() == o.get_name()
-  }
-  fn overload_engine(&self, engine : Arc<EthEngine>) -> Arc<EthEngine> {
-    engine
-  }
 }
-
 
 lazy_static! {
   // contract addresses.
-  pub static ref PLUGINS: Mutex<Plugins> = Mutex::new(Plugins::new());
+  pub static ref PLUGINS_JSON_CHAIN: Mutex<Plugins<PluginJsonChain>> = Mutex::new(Plugins::new());
 }
 
 
