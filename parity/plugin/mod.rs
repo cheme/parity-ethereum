@@ -13,7 +13,7 @@ use parking_lot::Mutex;
 use std::fmt::{ Debug, Formatter, Result as FmtResult };
 use std::ops::{ Deref, DerefMut };
 
-pub struct PluginJsonChain(Box<dyn ParityPluginJsonChain>);
+pub struct PluginJsonChain(pub Box<dyn ParityPluginJsonChain>);
 
 impl Deref for PluginJsonChain {
   type Target = Box<dyn ParityPluginJsonChain>;

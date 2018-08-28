@@ -1,0 +1,50 @@
+[parity]
+no_persistent_txqueue = false
+
+chain = "callisto"
+#base_path = "./io.parity.ethereum"
+base_path = "$HOME/.local/share/io.parity.ethereum"
+#db_path = "$HOME/.local/share/io.parity.ethereum/chains"
+db_path = "./io.parity.ethereum/chains"
+#keys_path = "$HOME/.local/share/io.parity.ethereum/keys"
+keys_path = "./io.parity.ethereum/keys"
+identity = ""
+light = true
+
+[light]
+on_demand_nb_retry = 7
+on_demand_inactive_time_limit = 10000
+
+[account]
+#unlock = ["0xb27ec463feb3985ff1b19b3643c832fa8d67dacb"]
+unlock = ["0x6e86e4b2193ae7552fa623eaabaeacee73839681"]
+
+password = ["./passwords"]
+
+[rpc]
+disable = false
+port = 8834
+interface = "all"
+cors = ["all"]
+apis = ["web3", "eth", "pubsub", "net", "parity", "parity_pubsub", "traces", "rpc", "shh", "shh_pubsub"]
+hosts = ["all"]
+
+[websockets]
+disable = false
+port = 8835
+interface = "all"
+origins = ["all"]
+apis = ["web3", "eth", "pubsub", "net", "parity", "parity_pubsub", "traces", "rpc", "shh", "shh_pubsub"]
+hosts = ["all"]
+
+[footprint]
+tracing = "off"
+pruning = "fast"
+cache_size = 512
+fast_and_loose = false
+db_compaction = "ssd"
+
+[misc]
+logging = "light_fetch=debug,rpc=debug,rpc-client=debug,on_demand=trace"
+#log_file = "/var/log/parity.log"
+color = true

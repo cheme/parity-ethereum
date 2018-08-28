@@ -7,6 +7,7 @@ use std::io::Read;
 
 fn main() {
 	if let Ok(spec_path) = env::var("PARITY_BUILD_FROM_SPEC") {
+    if spec_path.len() > 0 {
     println!("cargo:rustc-cfg=feature=\"no-default\"");
 
     let mut file = fs::File::open(&spec_path).expect("File not found at env var PARITY_BUILD_FROM_SPEC");
@@ -17,5 +18,6 @@ fn main() {
 		let conf : Value = config.parse().expect("Invalid toml config");
 		let chain_name = conf["parity"]["chain"].as_str().expect("no chain name");
     println!("cargo:rustc-cfg=feature=\"{}\"",chain_name);
+    }
   }
 }

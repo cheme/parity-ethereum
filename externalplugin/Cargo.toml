@@ -1,0 +1,12 @@
+[package]
+description = "test"
+name = "callipso2"
+version = "0.0.1"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+parity-ethereum = { path = ".." }
+ethcore = { path = "../ethcore" }
+

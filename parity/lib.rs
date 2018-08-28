@@ -111,7 +111,7 @@ mod upgrade;
 mod user_defaults;
 mod whisper;
 mod db;
-mod plugin;
+pub mod plugin;
 
 use std::io::BufReader;
 use std::fs::File;
