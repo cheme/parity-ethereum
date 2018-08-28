@@ -17,7 +17,14 @@ fn main() {
     // TODO also probably need to parse chain spec (for engine...)
 		let conf : Value = config.parse().expect("Invalid toml config");
 		let chain_name = conf["parity"]["chain"].as_str().expect("no chain name");
-    println!("cargo:rustc-cfg=feature=\"{}\"",chain_name);
+
+    if chain_name.starts_with("dyn_") { // TODO add a dyn flag in toml
+      let chain_name = &chain_name[4..];
+      // TODO proper dyn lib path management (at least some env variable & default linux path). For
+      // now hard coded in pulgin code (at least put in env variable)
+    } else { 
+      println!("cargo:rustc-cfg=feature=\"{}\"",chain_name);
+    }
     }
   }
 }

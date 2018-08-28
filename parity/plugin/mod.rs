@@ -3,6 +3,10 @@
 /// implementation.
 ///
 ///
+extern crate libloading;
+use std::fs::{ self };
+use std::path::Path;
+use self::libloading::Library;
 #[cfg(any(not(feature="no-default"),feature="musicoin"))]
 mod musicoin;
 #[cfg(any(not(feature="no-default"),feature="callisto"))]
@@ -80,6 +84,7 @@ impl<P : ParityPlugin> Plugins<P> {
 }
 
 impl Plugins<PluginJsonChain> {
+
   pub fn new() -> Plugins<PluginJsonChain> {
     let mut plugins : Vec<PluginJsonChain> = Vec::new();
 
@@ -87,6 +92,30 @@ impl Plugins<PluginJsonChain> {
     plugins.push(PluginJsonChain(Box::new(musicoin::Musicoin)));
     #[cfg(any(not(feature="no-default"),feature="callisto"))]
     plugins.push(PluginJsonChain(Box::new(callisto::Callisto::new())));
+
+    // dirty look up for so file at static lib TODO configure it, all files are considered plugins
+    // Also TODO feature gate this dyn loading
+    let dir = Path::new("./jsonplugins");
+    if dir.is_dir() {
+        for entry in fs::read_dir(dir).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            let lib = Library::new(path).expect("error loading lib");
+            let instantiate = unsafe {
+               //lib.get::<fn() -> usize>(b"instantiate_json_chain\0")
+               lib.get::<fn() -> Box<dyn ParityPluginJsonChain>>(b"instantiate_json_chain\0")
+               //lib.get::<fn() -> *mut Box<ParityPluginJsonChain>>(b"instantiate_json_chain\0")
+                        .expect("Symbol not present for so")
+            };
+            let b = instantiate();
+            //let b = unsafe { Box::from_raw(b) };
+            //let b = *b;
+            println!("loading dyn plugin {}",b.get_name());
+            plugins.push(PluginJsonChain(b));
+            println!("added");
+        }
+    }
+
     Plugins {
       plugins : plugins,
     }
@@ -117,7 +146,12 @@ pub trait ParityPluginJsonChain : ParityPlugin {
 
 lazy_static! {
   // contract addresses.
-  pub static ref PLUGINS_JSON_CHAIN: Mutex<Plugins<PluginJsonChain>> = Mutex::new(Plugins::new());
+  pub static ref PLUGINS_JSON_CHAIN: Mutex<Plugins<PluginJsonChain>> = {
+    println!("bef");
+    let m = Mutex::new(Plugins::new());
+    println!("aft");
+    m
+  };
 }
 
 

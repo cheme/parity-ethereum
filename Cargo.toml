@@ -11,6 +11,7 @@ build = "build.rs"
 lazy_static = "1.0"
 blooms-db = { path = "util/blooms-db" }
 log = "0.4"
+libloading = "0.5"
 env_logger = "0.5"
 rustc-hex = "1.0"
 docopt = "0.8"
