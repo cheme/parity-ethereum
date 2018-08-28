@@ -46,7 +46,6 @@ fn main() {
 		track = track,
 		version = version,
 	));
-  println!("cargo:rustc-cfg=callisto");
 }
 
 fn create_file(filename: &str, data: String) {
