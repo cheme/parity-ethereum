@@ -199,9 +199,6 @@ impl LightFetch {
 		let (sync, on_demand, client) = (self.sync.clone(), self.on_demand.clone(), self.client.clone());
 		let req: CallRequestHelper = req.into();
 
-		// Note: Here we treat `Pending` as `Latest`.
-		//       Since light clients don't produce pending blocks
-		//       (they don't have state) we can safely fallback to `Latest`.
 		let id = match num.unwrap_or_default() {
 			BlockNumber::Num(n) => BlockId::Number(n),
 			BlockNumber::Earliest => BlockId::Earliest,
@@ -210,6 +207,15 @@ impl LightFetch {
 				warn!("`Pending` is deprecated and may be removed in future versions. Falling back to `Latest`");
 				BlockId::Latest
 			}
+		};
+
+		// assert fix block number (no race)
+		let id = match client.env_info(id) {
+				Some(env_info) => BlockId::Number(env_info.number),
+				_ => {
+					warn!("Unknown block... using Latest : racy ?");
+					BlockId::Latest
+				}
 		};
 
 		let from = req.from.unwrap_or_else(|| Address::zero());
@@ -265,6 +271,7 @@ impl LightFetch {
 				sync: sync,
 			}))
 		}))
+	
 	}
 
 	/// Get a block itself. Fails on unknown block ID.
