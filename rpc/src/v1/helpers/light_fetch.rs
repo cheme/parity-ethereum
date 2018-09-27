@@ -212,6 +212,9 @@ impl LightFetch {
 			}
 		};
 
+		// Resolve to fix block number (avoid racy behaviour)
+		let id = client.env_info(id).map(|ei|BlockId::Number(ei.number)).unwrap_or(id);
+
 		let from = req.from.unwrap_or_else(|| Address::zero());
 		let nonce_fut = match req.nonce {
 			Some(nonce) => Either::A(future::ok(Some(nonce))),
