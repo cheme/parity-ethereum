@@ -2176,3 +2176,83 @@ mod tests {
 		assert_eq!(output[..], [0u8; 20][..]);
 	}
 }
+
+// TODO this does not check any gas cost but just address calc
+// -> should use fresh test with requirement, but having those
+// code size as sample does not make to much sense.
+#[test]
+fn test_create2_cost() {
+  use rustc_hex::FromHex;
+  use ethereum_types::Address;
+  use vm::CreateContractAddress;
+  struct TestCase {
+		pub origin : &'static str,
+		pub salt : &'static str,
+		pub code : &'static str,
+		pub expected : &'static str,
+	}
+ 	let testcase = [
+		TestCase {
+			origin:   "0000000000000000000000000000000000000000",
+			salt:     "0000000000000000000000000000000000000000",
+			code:     "00",
+			expected: "4d1a2e2bb4f88f0250f26ffff098b0b30b26bf38",
+		},
+		TestCase {
+			origin:   "deadbeef00000000000000000000000000000000",
+			salt:     "0000000000000000000000000000000000000000",
+			code:     "00",
+			expected: "B928f69Bb1D91Cd65274e3c79d8986362984fDA3",
+		},
+		TestCase {
+			origin:   "deadbeef00000000000000000000000000000000",
+			salt:     "feed000000000000000000000000000000000000",
+			code:     "00",
+			expected: "D04116cDd17beBE565EB2422F2497E06cC1C9833",
+		},
+		TestCase {
+			origin:   "0000000000000000000000000000000000000000",
+			salt:     "0000000000000000000000000000000000000000",
+			code:     "deadbeef",
+			expected: "70f2b2914A2a4b783FaEFb75f459A580616Fcb5e",
+		},
+		TestCase {
+			origin:   "00000000000000000000000000000000deadbeef",
+			salt:     "00000000000000000000000000000000cafebabe",
+			code:     "deadbeef",
+			expected: "60f3f640a8508fC6a86d45DF051962668E1e8AC7",
+		},
+		TestCase {
+			origin:   "00000000000000000000000000000000deadbeef",
+			salt:     "00000000000000000000000000000000cafebabe",
+			code:     "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+			expected: "1d8bfDC5D46DC4f61D6b6115972536eBE6A8854C",
+		},
+		TestCase {
+			origin:   "0000000000000000000000000000000000000000",
+			salt:     "0000000000000000000000000000000000000000",
+			code:     "",
+			expected: "E33C0C7F7df4809055C3ebA6c09CFe4BaF1BD9e0",
+		},
+	];
+  
+  for tt in testcase.iter() {
+ 		let origin = Address::from(tt.origin);
+		let salt = H256::from(&U256::from(&tt.salt.from_hex().unwrap()[..20]));
+		let code = tt.code.from_hex().unwrap();
+ 		let expected = Address::from(tt.expected);
+    let address = contract_address(CreateContractAddress::FromSenderSaltAndCodeHash(salt), &origin, &U256::default(), &code).0;
+    println!("{:?},{:?},{:?},{:?},{:?}", origin, salt, code, expected, address);
+    assert_eq!(expected, address);
+//    let address = crypto.CreateAddress2(origin, salt, code)
+		/*
+			stack          := newstack()
+			// salt, but we don't need that for this test
+			stack.push(big.NewInt(int64(len(code)))) //size
+			stack.push(big.NewInt(0)) // memstart
+			stack.push(big.NewInt(0)) // value
+			gas, _ := gasCreate2(params.GasTable{}, nil, nil, stack, nil, 0)
+			fmt.Printf("Example %d\n* address `0x%x`\n* salt `0x%x`\n* init_code `0x%x`\n* gas (assuming no mem expansion): `%v`\n* result: `%s`\n\n", i,origin, salt, code, gas, address.String())
+		*/
+ 	}
+}

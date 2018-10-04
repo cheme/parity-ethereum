@@ -471,3 +471,4 @@ fn test_calculate_mem_cost() {
 	assert_eq!(new_mem_gas, 3);
 	assert_eq!(mem_size, 32);
 }
+
