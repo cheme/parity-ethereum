@@ -209,7 +209,7 @@ impl ExtendedKeyPair {
 mod derivation {
 	use parity_crypto::hmac;
 	use ethereum_types::{U256, U512, H512, H256};
-	use secp256k1::key::{SecretKey, PublicKey};
+	use parity_crypto::secp256k1::{SecretKey, PublicKey};
 	use SECP256K1;
 	use keccak;
 	use math::curve_order;

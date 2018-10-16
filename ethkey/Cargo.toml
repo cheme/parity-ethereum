@@ -6,8 +6,8 @@ authors = ["Parity Technologies <admin@parity.io>"]
 [dependencies]
 byteorder = "1.0"
 edit-distance = "2.0"
-parity-crypto = { git = "https://github.com/cheme/parity-common.git", branch = "wasm-test" }
-eth-secp256k1 = { git = "https://github.com/paritytech/rust-secp256k1" }
+#parity-crypto = { git = "https://github.com/cheme/parity-common.git", branch = "wasm-test" }
+parity-crypto = { path = "../../../parity-common/parity-crypto" }
 ethereum-types = "0.4"
 lazy_static = "1.0"
 log = "0.4"

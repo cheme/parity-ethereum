@@ -26,7 +26,6 @@ extern crate parity_wordlist;
 extern crate quick_error;
 extern crate rand;
 extern crate rustc_hex;
-extern crate secp256k1;
 extern crate serde;
 extern crate tiny_keccak;
 
@@ -72,7 +71,7 @@ pub use ethereum_types::{Address, Public};
 pub type Message = H256;
 
 lazy_static! {
-	pub static ref SECP256K1: secp256k1::Secp256k1 = secp256k1::Secp256k1::new();
+	pub static ref SECP256K1: parity_crypto::secp256k1::Secp256k1 = parity_crypto::secp256k1::Secp256k1::new();
 }
 
 /// Uninstantiatable error type for infallible generators.

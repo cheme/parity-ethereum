@@ -15,8 +15,8 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 use super::{SECP256K1, Public, Secret, Error};
-use secp256k1::key;
-use secp256k1::constants::{GENERATOR_X, GENERATOR_Y, CURVE_ORDER};
+use parity_crypto::secp256k1::{MINUS_ONE_KEY, PublicKey};
+use parity_crypto::secp256k1::{GENERATOR_X, GENERATOR_Y, CURVE_ORDER};
 use ethereum_types::{U256, H256};
 
 /// Whether the public key is valid.
@@ -46,7 +46,7 @@ pub fn public_add(public: &mut Public, other: &Public) -> Result<(), Error> {
 /// Inplace sub one public key from another (EC point - EC point)
 pub fn public_sub(public: &mut Public, other: &Public) -> Result<(), Error> {
 	let mut key_neg_other = to_secp256k1_public(other)?;
-	key_neg_other.mul_assign(&SECP256K1, &key::MINUS_ONE_KEY)?;
+	key_neg_other.mul_assign(&SECP256K1, &MINUS_ONE_KEY)?;
 
 	let mut key_public = to_secp256k1_public(public)?;
 	key_public.add_assign(&SECP256K1, &key_neg_other)?;
@@ -57,7 +57,7 @@ pub fn public_sub(public: &mut Public, other: &Public) -> Result<(), Error> {
 /// Replace public key with its negation (EC point = - EC point)
 pub fn public_negate(public: &mut Public) -> Result<(), Error> {
 	let mut key_public = to_secp256k1_public(public)?;
-	key_public.mul_assign(&SECP256K1, &key::MINUS_ONE_KEY)?;
+	key_public.mul_assign(&SECP256K1, &MINUS_ONE_KEY)?;
 	set_public(public, &key_public);
 	Ok(())
 }
@@ -69,7 +69,7 @@ pub fn generation_point() -> Public {
 	public_sec_raw[1..33].copy_from_slice(&GENERATOR_X);
 	public_sec_raw[33..65].copy_from_slice(&GENERATOR_Y);
 
-	let public_key = key::PublicKey::from_slice(&SECP256K1, &public_sec_raw)
+	let public_key = PublicKey::from_slice(&SECP256K1, &public_sec_raw)
 		.expect("constructing using predefined constants; qed");
 	let mut public = Public::default();
 	set_public(&mut public, &public_key);
@@ -81,17 +81,17 @@ pub fn curve_order() -> U256 {
 	H256::from_slice(&CURVE_ORDER).into()
 }
 
-fn to_secp256k1_public(public: &Public) -> Result<key::PublicKey, Error> {
+fn to_secp256k1_public(public: &Public) -> Result<PublicKey, Error> {
 	let public_data = {
 		let mut temp = [4u8; 65];
 		(&mut temp[1..65]).copy_from_slice(&public[0..64]);
 		temp
 	};
 
-	Ok(key::PublicKey::from_slice(&SECP256K1, &public_data)?)
+	Ok(PublicKey::from_slice(&SECP256K1, &public_data)?)
 }
 
-fn set_public(public: &mut Public, key_public: &key::PublicKey) {
+fn set_public(public: &mut Public, key_public: &PublicKey) {
 	let key_public_serialized = key_public.serialize_vec(&SECP256K1, false);
 	public.copy_from_slice(&key_public_serialized[1..65]);
 }

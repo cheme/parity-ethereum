@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
-use secp256k1;
+use parity_crypto::secp256k1;
 use std::io;
 use parity_crypto::error::SymmError;
 
@@ -43,7 +43,7 @@ quick_error! {
 
 /// ECDH functions
 pub mod ecdh {
-	use secp256k1::{self, ecdh, key};
+	use parity_crypto::secp256k1::{self, ecdh, PublicKey, SecretKey};
 	use super::Error;
 	use {Secret, Public, SECP256K1};
 
@@ -56,8 +56,8 @@ pub mod ecdh {
 			temp
 		};
 
-		let publ = key::PublicKey::from_slice(context, &pdata)?;
-		let sec = key::SecretKey::from_slice(context, &secret)?;
+		let publ = PublicKey::from_slice(context, &pdata)?;
+		let sec = SecretKey::from_slice(context, &secret)?;
 		let shared = ecdh::SharedSecret::new_raw(context, &publ, &sec);
 
 		Secret::from_unsafe_slice(&shared[0..32])
