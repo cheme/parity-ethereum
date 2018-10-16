@@ -12,7 +12,9 @@ ethereum-types = "0.4"
 lazy_static = "1.0"
 log = "0.4"
 mem = { path = "../util/mem" }
-parity-wordlist = "1.2"
+#parity-wordlist="1.2"
+parity-wordlist={ git = "https://github.com/cheme/wordlist.git", branch = "wasm-test" }
+#parity-wordlist={ path = "../../../wordlist" }
 quick-error = "1.2.2"
 rand = "0.4"
 rustc-hex = "1.0"
