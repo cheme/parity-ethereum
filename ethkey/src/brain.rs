@@ -32,7 +32,7 @@ impl Brain {
 }
 
 impl Generator for Brain {
-    type Error = ::Void;
+  type Error = ::Void;
 
 	fn generate(&mut self) -> Result<KeyPair, Self::Error> {
 		let seed = self.0.clone();

@@ -138,15 +138,15 @@ impl Default for Signature {
 }
 
 impl Hash for Signature {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-    	H520::from(self.0).hash(state);
-    }
+	fn hash<H: Hasher>(&self, state: &mut H) {
+			H520::from(self.0).hash(state);
+	}
 }
 
 impl Clone for Signature {
-    fn clone(&self) -> Self {
+	fn clone(&self) -> Self {
 		Signature(self.0)
-    }
+	}
 }
 
 impl From<[u8; 65]> for Signature {
@@ -188,11 +188,11 @@ impl DerefMut for Signature {
 }
 
 pub fn sign(secret: &Secret, message: &Message) -> Result<Signature, Error> {
-  Ok(Signature(secp256k1::sign(&secret[..], &message[..])?))
+	Ok(Signature(secp256k1::sign(&secret[..], &message[..])?))
 }
 
 pub fn verify_public(public: &Public, signature: &Signature, message: &Message) -> Result<bool, Error> {
-  secp256k1::verify_public(&public[..], &signature[..], &message[..]).map_err(|e|e.into())
+	secp256k1::verify_public(&public[..], &signature[..], &message[..]).map_err(|e|e.into())
 }
 
 pub fn verify_address(address: &Address, signature: &Signature, message: &Message) -> Result<bool, Error> {
@@ -202,7 +202,7 @@ pub fn verify_address(address: &Address, signature: &Signature, message: &Messag
 }
 
 pub fn recover(signature: &Signature, message: &Message) -> Result<Public, Error> {
-  Ok(secp256k1::recover(&signature[..], &message[..])?.into())
+	 Ok(secp256k1::recover(&signature[..], &message[..])?.into())
 }
 
 #[cfg(test)]

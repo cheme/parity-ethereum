@@ -30,8 +30,6 @@ extern crate serde;
 extern crate tiny_keccak;
 
 #[macro_use]
-extern crate lazy_static;
-#[macro_use]
 extern crate log;
 #[macro_use]
 extern crate serde_derive;
@@ -69,10 +67,6 @@ use ethereum_types::H256;
 
 pub use ethereum_types::{Address, Public};
 pub type Message = H256;
-
-lazy_static! {
-	pub static ref SECP256K1: parity_crypto::secp256k1::Secp256k1 = parity_crypto::secp256k1::Secp256k1::new();
-}
 
 /// Uninstantiatable error type for infallible generators.
 #[derive(Debug)]

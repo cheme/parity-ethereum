@@ -22,8 +22,11 @@ quick_error! {
 	#[derive(Debug)]
 	pub enum Error {
 		Secp(e: secp256k1::Error) {
-			display("secp256k1 error: {}", e)
-			cause(e)
+			// TODO alternate secp256k1 pr to add display trait
+			// on error or stick to debug
+			display("secp256k1 error: {:?}", e)
+			// TODO add a specific uniqueerror type in parity crypto that implement Error (or not)
+      // cause(e)
 			from()
 		}
 		Io(e: io::Error) {
@@ -43,24 +46,17 @@ quick_error! {
 
 /// ECDH functions
 pub mod ecdh {
-	use parity_crypto::secp256k1::{self, ecdh, PublicKey, SecretKey};
+	use parity_crypto::secp256k1;
 	use super::Error;
-	use {Secret, Public, SECP256K1};
+	use {Secret, Public};
 
 	/// Agree on a shared secret
 	pub fn agree(secret: &Secret, public: &Public) -> Result<Secret, Error> {
-		let context = &SECP256K1;
-		let pdata = {
-			let mut temp = [4u8; 65];
-			(&mut temp[1..65]).copy_from_slice(&public[0..64]);
-			temp
-		};
 
-		let publ = PublicKey::from_slice(context, &pdata)?;
-		let sec = SecretKey::from_slice(context, &secret)?;
-		let shared = ecdh::SharedSecret::new_raw(context, &publ, &sec);
-
-		Secret::from_unsafe_slice(&shared[0..32])
+		let publ = secp256k1::public_from_slice(&public[0..64])?;
+		let sec = secp256k1::secret_from_slice(&secret)?;
+		let shared = secp256k1::shared_secret(&publ, &sec)?;
+		Secret::from_unsafe_slice(&shared.as_ref()[0..32])
 			.map_err(|_| Error::Secp(secp256k1::Error::InvalidSecretKey))
 	}
 }
@@ -112,7 +108,7 @@ pub mod ecies {
 	/// and authenticated data validity.
 	pub fn decrypt(secret: &Secret, auth_data: &[u8], encrypted: &[u8]) -> Result<Vec<u8>, Error> {
 		let meta_len = 1 + 64 + 16 + 32;
-		if encrypted.len() < meta_len  || encrypted[0] < 2 || encrypted[0] > 4 {
+		if encrypted.len() < meta_len || encrypted[0] < 2 || encrypted[0] > 4 {
 			return Err(Error::InvalidMessage); //invalid message: publickey
 		}
 

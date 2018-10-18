@@ -15,10 +15,10 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::fmt;
-use parity_crypto::secp256k1::{SecretKey, PublicKey};
+use parity_crypto::secp256k1::{self, SecretKey, PublicKey};
 use rustc_hex::ToHex;
 use keccak::Keccak256;
-use super::{Secret, Public, Address, SECP256K1, Error};
+use super::{Secret, Public, Address, Error};
 
 pub fn public_to_address(public: &Public) -> Address {
 	let hash = public.keccak256();
@@ -45,13 +45,12 @@ impl fmt::Display for KeyPair {
 impl KeyPair {
 	/// Create a pair from secret key
 	pub fn from_secret(secret: Secret) -> Result<KeyPair, Error> {
-		let context = &SECP256K1;
-		let s: SecretKey = SecretKey::from_slice(context, &secret[..])?;
-		let pub_key = PublicKey::from_secret_key(context, &s)?;
-		let serialized = pub_key.serialize_vec(context, false);
+		let s: SecretKey = secp256k1::secret_from_slice(&secret[..])?;
+		let pub_key = secp256k1::public_from_secret(&s)?;
+		let serialized = secp256k1::public_to_vec(&pub_key);
 
 		let mut public = Public::default();
-		public.copy_from_slice(&serialized[1..65]);
+		public.copy_from_slice(serialized.as_ref());
 
 		let keypair = KeyPair {
 			secret: secret,
@@ -66,11 +65,10 @@ impl KeyPair {
 	}
 
 	pub fn from_keypair(sec: SecretKey, publ: PublicKey) -> Self {
-		let context = &SECP256K1;
-		let serialized = publ.serialize_vec(context, false);
+		let serialized = secp256k1::public_to_vec(&publ);
 		let secret = Secret::from(sec);
 		let mut public = Public::default();
-		public.copy_from_slice(&serialized[1..65]);
+		public.copy_from_slice(serialized.as_ref());
 
 		KeyPair {
 			secret: secret,
