@@ -13,9 +13,14 @@ parity-wordlist={ git = "https://github.com/cheme/wordlist.git", branch = "wasm-
 rustc-hex = "1.0"
 serde = "1.0"
 serde_derive = "1.0"
-threadpool = "1.7"
+#parity-wasm-compat = { git = "https://github.com/cheme/parity-common.git", branch = "wasm-test" }
+parity-wasm-compat = { path = "../../../../parity-common/parity-wasm-compat" }
 
 [[bin]]
 name = "ethkey"
 path = "src/main.rs"
 doc = false
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+

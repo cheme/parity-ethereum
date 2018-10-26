@@ -28,6 +28,7 @@ extern crate rand;
 extern crate rustc_hex;
 extern crate serde;
 extern crate tiny_keccak;
+extern crate parity_wasm_compat;
 
 #[macro_use]
 extern crate log;

@@ -21,11 +21,17 @@ extern crate panic_hook;
 extern crate parity_wordlist;
 extern crate rustc_hex;
 extern crate serde;
-extern crate threadpool;
+extern crate parity_wasm_compat;
+
+#[cfg(target_arch = "wasm32")]
+extern crate wasm_bindgen;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
 
 #[macro_use]
 extern crate serde_derive;
 
+use parity_wasm_compat::threadpool;
 use std::num::ParseIntError;
 use std::{env, fmt, process, io, sync};
 
@@ -337,6 +343,14 @@ fn in_threads<F, X, O>(prepare: F) -> Result<O, EthkeyError> where
 
 	Err(EthkeyError::Custom("No results found.".into()))
 }
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn ethkey(params: Vec<JsValue>) -> Result<String, JsValue> {
+	let params = params.iter().map(|jsval|jsval.as_string().expect("Only string parameters accepted"));
+	execute(params).map_err(|e|JsValue::from_str(&format!("ethkey error: {}",e)))
+}
+
 
 #[cfg(test)]
 mod tests {
