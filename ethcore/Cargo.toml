@@ -41,7 +41,7 @@ itertools = "0.5"
 lazy_static = "1.0"
 log = "0.4"
 lru-cache = "0.1"
-num = { version = "0.1", default-features = false, features = ["bigint"] }
+num = { version = "0.2", default-features = false, features = ["std"] }
 num_cpus = "1.2"
 parity-machine = { path = "../machine" }
 parking_lot = "0.6"

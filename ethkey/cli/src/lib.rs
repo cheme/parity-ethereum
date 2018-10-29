@@ -33,7 +33,7 @@ extern crate serde_derive;
 
 use parity_wasm_compat::threadpool;
 use std::num::ParseIntError;
-use std::{env, fmt, process, io};
+use std::{env, fmt, process, io, sync};
 
 use docopt::Docopt;
 use ethkey::{KeyPair, Random, Brain, BrainPrefix, Prefix, Error as EthkeyError, Generator, sign, verify_public, verify_address, brain_recover};
@@ -312,12 +312,17 @@ fn in_threads<F, X, O>(prepare: F) -> Result<O, EthkeyError> where
 	let pool = threadpool::Builder::new().build();
 
 	let (tx, rx) = parity_wasm_compat::mpsc::sync_channel(1);
+	let is_done = sync::Arc::new(sync::atomic::AtomicBool::default());
 
 	for _ in 0..pool.max_count() {
 		let tx = tx.clone();
 		let mut task = prepare();
+    let is_done = is_done.clone();
 		pool.execute(move || {
 			loop {
+				if is_done.load(sync::atomic::Ordering::SeqCst) {
+					return;
+				}
 
 				let res = match task() {
 					Ok(None) => continue,
@@ -327,12 +332,14 @@ fn in_threads<F, X, O>(prepare: F) -> Result<O, EthkeyError> where
 
 				// We are interested only in the first response.
 				let _ = tx.send(res);
-        return;
+        // early exit for wasm
+				return;
 			}
 		});
 	}
 
 	if let Ok(solution) = rx.recv() {
+		is_done.store(true, sync::atomic::Ordering::SeqCst);
 		return solution;
 	}
 
