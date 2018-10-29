@@ -1,0 +1,15 @@
+{
+  "name": "ethkey-cli",
+  "collaborators": [
+    "Parity Technologies <admin@parity.io>"
+  ],
+  "version": "0.1.0",
+  "files": [
+    "ethkey_cli_bg.wasm",
+    "ethkey_cli.js",
+    "ethkey_cli.d.ts"
+  ],
+  "module": "ethkey_cli.js",
+  "types": "ethkey_cli.d.ts",
+  "sideEffects": "false"
+}
