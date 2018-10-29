@@ -231,7 +231,7 @@ impl NetworkConfiguration {
 			ip_filter: IpFilter::default(),
 			reserved_nodes: Vec::new(),
 			non_reserved_mode: NonReservedPeerMode::Accept,
-			client_version: "Parity-network".into(),
+			client_version: "Parity-network".to_string(),
 		}
 	}
 
