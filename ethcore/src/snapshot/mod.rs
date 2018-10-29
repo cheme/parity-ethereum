@@ -34,7 +34,7 @@ use ids::BlockId;
 use ethereum_types::{H256, U256};
 use hashdb::HashDB;
 use keccak_hasher::KeccakHasher;
-use snappy;
+use parity_wasm_compat::snappy::snappy;
 use bytes::Bytes;
 use parking_lot::Mutex;
 use journaldb::{self, Algorithm, JournalDB};

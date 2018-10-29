@@ -78,7 +78,7 @@ fn snap_and_restore() {
 
 		for chunk_hash in &reader.manifest().state_hashes {
 			let raw = reader.chunk(*chunk_hash).unwrap();
-			let chunk = ::snappy::decompress(&raw).unwrap();
+			let chunk = ::parity_wasm_compat::snappy::snappy::decompress(&raw).unwrap();
 
 			rebuilder.feed(&chunk, &flag).unwrap();
 		}
@@ -190,7 +190,7 @@ fn checks_flag() {
 
 		for chunk_hash in &reader.manifest().state_hashes {
 			let raw = reader.chunk(*chunk_hash).unwrap();
-			let chunk = ::snappy::decompress(&raw).unwrap();
+			let chunk = ::parity_wasm_compat::snappy::snappy::decompress(&raw).unwrap();
 
 			match rebuilder.feed(&chunk, &flag) {
 				Err(Error(ErrorKind::Snapshot(SnapshotError::RestorationAborted), _)) => {},

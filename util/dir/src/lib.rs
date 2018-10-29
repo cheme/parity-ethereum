@@ -20,7 +20,7 @@
 extern crate app_dirs;
 extern crate ethereum_types;
 extern crate journaldb;
-extern crate home;
+extern crate parity_wasm_compat;
 
 pub mod helpers;
 use std::fs;
@@ -32,7 +32,7 @@ use app_dirs::{AppInfo, get_app_root, AppDataType};
 // re-export platform-specific functions
 use platform::*;
 
-pub use home::home_dir;
+pub use parity_wasm_compat::home::home_dir;
 
 /// Platform-specific chains path for standard client - Windows only
 #[cfg(target_os = "windows")] pub const CHAINS_PATH: &str = "$LOCAL/chains";

@@ -18,7 +18,7 @@
 
 extern crate either;
 extern crate ethereum_types;
-extern crate memmap;
+extern crate parity_wasm_compat;
 extern crate parking_lot;
 extern crate primal;
 

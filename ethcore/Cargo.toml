@@ -52,7 +52,6 @@ rlp_compress = { path = "../util/rlp_compress" }
 rlp_derive = { path = "../util/rlp_derive" }
 kvdb = "0.1"
 kvdb-memorydb = "0.1"
-parity-snappy = "0.1"
 stop-guard = { path = "../util/stop-guard" }
 macros = { path = "../util/macros" }
 rustc-hex = "1.0"
@@ -66,8 +65,9 @@ triehash-ethereum = { version = "0.2",  path = "../util/triehash-ethereum" }
 unexpected = { path = "../util/unexpected" }
 journaldb = { path = "../util/journaldb" }
 keccak-hasher = { path = "../util/keccak-hasher" }
-kvdb-rocksdb = "0.1.3"
 tempdir = {version="0.3", optional = true}
+parity-wasm-compat = { path = "../../../parity-common/parity-wasm-compat" }
+kvdb-rocksdb = { version = "0.1.3", optional = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "android"))'.dependencies]
 hardware-wallet = { path = "../hw" }
@@ -78,6 +78,8 @@ fake-hardware-wallet = { path = "../util/fake-hardware-wallet" }
 [dev-dependencies]
 tempdir = "0.3"
 trie-standardmap = "0.1"
+kvdb-rocksdb = "0.1.3"
+#trie-standardmap = { git = "https://github.com/paritytech/parity-common.git" }
 
 [features]
 parity = ["work-notify", "price-info", "stratum"]
@@ -109,6 +111,6 @@ test-heavy = []
 # Compile benches
 benches = []
 # Compile test helpers
-test-helpers = ["tempdir"]
+test-helpers = ["tempdir", "kvdb-rocksdb"]
 # Reduce dependency for evmclient or evmbin / usefull for wasm32 compile
 reduce-build = []

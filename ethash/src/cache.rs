@@ -17,7 +17,7 @@
 use compute::Light;
 use either::Either;
 use keccak::{H256, keccak_512};
-use memmap::MmapMut;
+use parity_wasm_compat::memmap::MmapMut;
 use parking_lot::Mutex;
 use seed_compute::SeedHashCompute;
 

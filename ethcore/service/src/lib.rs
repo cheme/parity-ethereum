@@ -38,7 +38,7 @@ extern crate tempdir;
 mod error;
 mod service;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-helpers"))]
 extern crate kvdb_rocksdb;
 
 pub use error::{Error, ErrorKind};

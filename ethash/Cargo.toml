@@ -9,7 +9,7 @@ either = "1.0.0"
 ethereum-types = "0.4"
 keccak-hash = "0.1"
 log = "0.4"
-memmap = "0.6"
+parity-wasm-compat = { git = "https://github.com/cheme/parity-common.git", branch = "wasm-test" }
 parking_lot = "0.6"
 primal = "0.2.3"
 

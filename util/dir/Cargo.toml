@@ -8,4 +8,4 @@ license = "GPL3"
 ethereum-types = "0.4"
 journaldb = { path = "../journaldb" }
 app_dirs = { git = "https://github.com/paritytech/app-dirs-rs" }
-home = "0.3"
+parity-wasm-compat = { git = "https://github.com/cheme/parity-common.git", branch = "wasm-test" }

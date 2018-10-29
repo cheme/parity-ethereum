@@ -40,7 +40,7 @@ use ethereum_types::H256;
 use parking_lot::{Mutex, RwLock, RwLockReadGuard};
 use bytes::Bytes;
 use journaldb::Algorithm;
-use snappy;
+use parity_wasm_compat::snappy::snappy;
 
 /// Helper for removing directories in case of error.
 struct Guard(bool, PathBuf);

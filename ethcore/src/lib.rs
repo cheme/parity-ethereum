@@ -81,6 +81,7 @@ extern crate hashdb;
 extern crate itertools;
 extern crate kvdb;
 extern crate kvdb_memorydb;
+#[cfg(any(test, feature = "test-helpers"))]
 extern crate kvdb_rocksdb;
 extern crate lru_cache;
 extern crate num_cpus;
@@ -100,7 +101,7 @@ extern crate patricia_trie_ethereum as ethtrie;
 extern crate triehash_ethereum as triehash;
 extern crate ansi_term;
 extern crate unexpected;
-extern crate parity_snappy as snappy;
+extern crate parity_wasm_compat;
 extern crate ethabi;
 extern crate rustc_hex;
 extern crate stats;
