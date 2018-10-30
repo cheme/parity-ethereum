@@ -1,0 +1,16 @@
+{
+  "name": "evmbin",
+  "collaborators": [
+    "Parity Technologies <admin@parity.io>"
+  ],
+  "description": "Parity's EVM implementation",
+  "version": "0.1.0",
+  "files": [
+    "evmbin_bg.wasm",
+    "evmbin.js",
+    "evmbin.d.ts"
+  ],
+  "module": "evmbin.js",
+  "types": "evmbin.d.ts",
+  "sideEffects": "false"
+}

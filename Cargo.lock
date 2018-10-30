@@ -1202,6 +1202,7 @@ dependencies = [
  "evm 0.1.0",
  "panic_hook 0.1.0",
  "parity-bytes 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "parity-wasm-compat 0.1.0",
  "pretty_assertions 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-hex 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.80 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1209,6 +1210,7 @@ dependencies = [
  "serde_json 1.0.32 (registry+https://github.com/rust-lang/crates.io-index)",
  "tempdir 0.3.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "vm 0.1.0",
+ "wasm-bindgen 0.2.25 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

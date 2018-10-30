@@ -34,7 +34,7 @@ use super::spec::*;
 pub fn load<'a, T: Into<Option<SpecParams<'a>>>>(params: T, b: &[u8]) -> Spec {
 	match params.into() {
 		Some(params) => Spec::load(params, b),
-		None => Spec::load(&::std::env::temp_dir(), b)
+		None => Spec::load(&parity_wasm_compat::env::temp_dir(), b)
 	}.expect("chain spec is invalid")
 }
 
