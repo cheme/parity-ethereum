@@ -179,7 +179,7 @@ mod tx_filter;
 mod tests;
 #[cfg(feature = "json-tests")]
 pub mod json_tests;
-#[cfg(any(test, feature = "test-helpers"))]
+#[cfg(any(test, feature = "test-helpers", feature = "test-helpers-no-rocksdb"))]
 pub mod test_helpers;
 
 pub use types::*;

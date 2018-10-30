@@ -41,6 +41,7 @@ use transaction::{Action, Transaction, SignedTransaction};
 use views::BlockView;
 use blooms_db;
 use kvdb::KeyValueDB;
+#[cfg(any(test, feature = "test-helpers"))]
 use kvdb_rocksdb;
 use tempdir::TempDir;
 use verification::queue::kind::blocks::Unverified;
@@ -301,6 +302,8 @@ pub fn new_db() -> Arc<BlockChainDB> {
 	Arc::new(db)
 }
 
+
+#[cfg(any(test, feature = "test-helpers"))]
 /// Creates new instance of KeyValueDBHandler
 pub fn restoration_db_handler(config: kvdb_rocksdb::DatabaseConfig) -> Box<BlockChainDBHandler> {
 	struct RestorationDBHandler {
