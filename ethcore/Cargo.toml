@@ -111,7 +111,7 @@ test-heavy = []
 # Compile benches
 benches = []
 # Compile test helpers
-test-helpers = ["tempdir", "kvdb-rocksdb"]
+test-helpers = ["tempdir", "kvdb-rocksdb", "test-helpers-no-rocksdb"]
 # Compile test helpers without rocksdb specifics
 test-helpers-no-rocksdb = ["tempdir"]
 # Reduce dependency for evmclient or evmbin / usefull for wasm32 compile
