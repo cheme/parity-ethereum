@@ -56,7 +56,7 @@ macro_rules! difficulty_json_test {
 	( $spec:ident ) => {
 
 	use super::json_difficulty_test;
-	use tempdir::TempDir;
+	use parity_wasm_compat::tempdir::TempDir;
 	use json_tests::HookType;
 
 	fn do_json_test<H: FnMut(&str, HookType)>(json_data: &[u8], h: &mut H) -> Vec<String> {

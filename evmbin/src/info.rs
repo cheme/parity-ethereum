@@ -16,7 +16,7 @@
 
 //! VM runner.
 
-use std::time::{Instant, Duration};
+use parity_wasm_compat::time::{Instant, Duration};
 use ethereum_types::{H256, U256};
 use ethcore::client::{self, EvmTestClient, EvmTestError, TransactResult};
 use ethcore::{trace, spec, pod_state};

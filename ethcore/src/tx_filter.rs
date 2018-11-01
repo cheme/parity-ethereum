@@ -150,7 +150,7 @@ mod test {
 	use ethkey::{Secret, KeyPair};
 	use super::TransactionFilter;
 	use transaction::{Transaction, Action};
-	use tempdir::TempDir;
+	use parity_wasm_compat::tempdir::TempDir;
 	use test_helpers;
 
 	/// Contract code: https://gist.github.com/VladLupashevskyi/84f18eabb1e4afadf572cf92af3e7e7f

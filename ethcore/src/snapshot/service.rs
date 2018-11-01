@@ -760,7 +760,7 @@ mod tests {
 	use error::Error;
 	use snapshot::{ManifestData, RestorationStatus, SnapshotService};
 	use super::*;
-	use tempdir::TempDir;
+	use parity_wasm_compat::tempdir::TempDir;
 	use test_helpers::restoration_db_handler;
 
 	struct NoopDBRestore;

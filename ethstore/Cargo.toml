@@ -16,12 +16,11 @@ tiny-keccak = "1.4"
 time = "0.1.34"
 itertools = "0.5"
 parking_lot = "0.6"
-parity-crypto = { git = "https://github.com/cheme/parity-common.git", branch = "wasm-test" }
+parity-crypto = "0.2"
 ethereum-types = "0.4"
 dir = { path = "../util/dir" }
 smallvec = "0.6"
-#parity-wordlist = "1.0"
-parity-wordlist={ git = "https://github.com/cheme/wordlist.git", branch = "wasm-test" }
+parity-wordlist = "1.2"
 tempdir = "0.3"
 
 [dev-dependencies]

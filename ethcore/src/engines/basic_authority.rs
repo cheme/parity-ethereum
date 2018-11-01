@@ -218,7 +218,7 @@ mod tests {
 	use header::Header;
 	use spec::Spec;
 	use engines::Seal;
-	use tempdir::TempDir;
+	use parity_wasm_compat::tempdir::TempDir;
 
 	/// Create a new test chain spec with `BasicAuthority` consensus engine.
 	fn new_test_authority() -> Spec {

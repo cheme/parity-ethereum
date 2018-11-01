@@ -35,7 +35,7 @@ use views::BlockView;
 use ethkey::KeyPair;
 use transaction::{PendingTransaction, Transaction, Action, Condition};
 use miner::MinerService;
-use tempdir::TempDir;
+use parity_wasm_compat::tempdir::TempDir;
 use test_helpers;
 use verification::queue::kind::blocks::Unverified;
 

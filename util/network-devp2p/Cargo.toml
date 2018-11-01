@@ -20,7 +20,7 @@ ansi_term = "0.10"
 rustc-hex = "1.0"
 ethcore-io = { path = "../io", features = ["mio"] }
 parity-bytes = "0.1"
-parity-crypto = { git = "https://github.com/cheme/parity-common.git", branch = "wasm-test" }
+parity-crypto = "0.2"
 ethcore-logger = { path ="../../logger" }
 ethcore-network = { path = "../network" }
 ethereum-types = "0.4"

@@ -16,7 +16,8 @@
 
 use std::collections::HashSet;
 use std::io::Read;
-use std::fs::{File, read_dir};
+use std::fs::read_dir;
+use parity_wasm_compat::fs::File;
 use std::path::Path;
 use std::ffi::OsString;
 pub use ethereum_types::{H256, U256, Address};
@@ -82,7 +83,9 @@ fn run_test_file_append<H: FnMut(&str, HookType)>(
 	let mut data = Vec::new();
 	let mut file = match File::open(&path) {
 		Ok(file) => file,
-		Err(_) => panic!("Error opening test file at: {:?}", path),
+		Err(_) => {
+      panic!("Error opening test file at: {:?}", path)
+    },
 	};
 	file.read_to_end(&mut data).expect("Error reading test file");
 	errors.append(&mut runner(&data, start_stop_hook));

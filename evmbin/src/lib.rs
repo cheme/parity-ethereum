@@ -51,7 +51,9 @@ extern crate tempdir;
 
 use std::io::Read;
 use std::sync::Arc;
-use std::{env, fmt, fs};
+
+use parity_wasm_compat::fs;
+use std::{env, fmt};
 use std::path::PathBuf;
 use docopt::Docopt;
 use rustc_hex::FromHex;
@@ -112,9 +114,13 @@ pub fn main() {
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub fn evmbin(params: Vec<JsValue>) {
+	use parity_wasm_compat::time::{SystemTime};
+	// we probably want display when using this command
+	parity_wasm_compat::hook_std_io();
 	let dummy_path = ["dummy path".to_string()];
 	let params = dummy_path.iter().map(|s|s.clone()).chain(params.iter()
 		.map(|jsval|jsval.as_string().expect("Only string parameters accepted")));
+  println!("Date start : {:?}", SystemTime::now());
 	execute(params);
 }
 
@@ -152,7 +158,7 @@ fn execute<S, I>(command: I) where I: IntoIterator<Item=S>, S: AsRef<str> {
 fn run_stats_jsontests_vm(args: Args) {
 	use json_tests::HookType;
 	use std::collections::HashMap;
-	use std::time::{Instant, Duration};
+	use parity_wasm_compat::time::{Instant, Duration};
 
 	let file = args.arg_file.expect("FILE (or PATH) is required");
 

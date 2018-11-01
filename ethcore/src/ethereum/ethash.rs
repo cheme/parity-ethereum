@@ -490,7 +490,7 @@ mod tests {
 	use super::super::{new_morden, new_mcip3_test, new_homestead_test_machine};
 	use super::{Ethash, EthashParams, ecip1017_eras_block_reward};
 	use rlp;
-	use tempdir::TempDir;
+	use parity_wasm_compat::tempdir::TempDir;
 
 	fn test_spec() -> Spec {
 		let tempdir = TempDir::new("").unwrap();

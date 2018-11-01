@@ -141,3 +141,5 @@ members = [
 [patch.crates-io]
 parity-crypto = { git = "https://github.com/cheme/parity-common", branch = "wasm-test" }
 ethereum-types = { git = "https://github.com/cheme/primitives", branch = "wasm-test" }
+ethbloom = { git = "https://github.com/cheme/primitives", branch = "wasm-test" }
+parity-wordlist={ git = "https://github.com/cheme/wordlist.git", branch = "wasm-test" }

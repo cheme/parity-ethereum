@@ -20,6 +20,7 @@ extern crate byteorder;
 extern crate ethbloom;
 extern crate parking_lot;
 extern crate tiny_keccak;
+extern crate parity_wasm_compat;
 
 #[cfg(test)]
 extern crate tempdir;

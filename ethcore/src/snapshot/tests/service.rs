@@ -18,7 +18,7 @@
 
 use std::sync::Arc;
 
-use tempdir::TempDir;
+use parity_wasm_compat::tempdir::TempDir;
 use client::{Client, BlockInfo};
 use ids::BlockId;
 use snapshot::service::{Service, ServiceParams};

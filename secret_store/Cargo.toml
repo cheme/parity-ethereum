@@ -22,7 +22,7 @@ tokio-service = "0.1"
 url = "1.0"
 ethcore = { path = "../ethcore" }
 parity-bytes = "0.1"
-parity-crypto = { git = "https://github.com/cheme/parity-common.git", branch = "wasm-test" }
+parity-crypto = "0.2"
 ethcore-logger = { path = "../logger" }
 ethcore-sync = { path = "../ethcore/sync" }
 ethcore-transaction = { path = "../ethcore/transaction" }

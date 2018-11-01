@@ -6,13 +6,12 @@ authors = ["Parity Technologies <admin@parity.io>"]
 [dependencies]
 byteorder = "1.0"
 edit-distance = "2.0"
-parity-crypto = { git = "https://github.com/cheme/parity-common.git", branch = "wasm-test" }
+parity-crypto = "0.2"
 ethereum-types = "0.4"
 lazy_static = "1.0"
 log = "0.4"
 mem = { path = "../util/mem" }
-#parity-wordlist="1.2"
-parity-wordlist={ git = "https://github.com/cheme/wordlist.git", branch = "wasm-test" }
+parity-wordlist="1.2"
 quick-error = "1.2.2"
 rand = "0.5"
 rustc-hex = "1.0"

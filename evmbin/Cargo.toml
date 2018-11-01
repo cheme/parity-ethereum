@@ -26,7 +26,7 @@ serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
 vm = { path = "../ethcore/vm" }
-parity-wasm-compat = { path = "../../../parity-common/parity-wasm-compat" }
+parity-wasm-compat = { git = "https://github.com/cheme/parity-common.git", branch = "wasm-test" }
 
 [dev-dependencies]
 pretty_assertions = "0.1"

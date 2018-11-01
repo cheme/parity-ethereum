@@ -16,7 +16,8 @@
 
 use std::io::{Seek, SeekFrom, Write, Read};
 use std::path::Path;
-use std::{io, fs};
+use std::io;
+use parity_wasm_compat::fs;
 
 use ethbloom;
 

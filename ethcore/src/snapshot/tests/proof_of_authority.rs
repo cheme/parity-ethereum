@@ -27,7 +27,7 @@ use snapshot::tests::helpers as snapshot_helpers;
 use spec::Spec;
 use test_helpers::generate_dummy_client_with_spec_and_accounts;
 use transaction::{Transaction, Action, SignedTransaction};
-use tempdir::TempDir;
+use parity_wasm_compat::tempdir::TempDir;
 
 use ethereum_types::Address;
 use test_helpers;

@@ -34,7 +34,7 @@ use journaldb::{self, Algorithm};
 use kvdb_rocksdb::{Database, DatabaseConfig};
 use memorydb::MemoryDB;
 use parking_lot::Mutex;
-use tempdir::TempDir;
+use parity_wasm_compat::tempdir::TempDir;
 
 #[test]
 fn snap_and_restore() {

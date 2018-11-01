@@ -30,7 +30,7 @@ use engines::EthEngine;
 use snapshot::{StateRebuilder};
 use snapshot::io::{SnapshotReader, PackedWriter, PackedReader};
 
-use tempdir::TempDir;
+use parity_wasm_compat::tempdir::TempDir;
 use rand::Rng;
 
 use kvdb::DBValue;

@@ -154,7 +154,7 @@ mod tests {
 	use super::AddressBook;
 	use std::collections::HashMap;
 	use ethjson::misc::AccountMeta;
-	use tempdir::TempDir;
+	use parity_wasm_compat::tempdir::TempDir;
 
 	#[test]
 	fn should_save_and_reload_address_book() {

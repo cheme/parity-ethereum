@@ -43,7 +43,7 @@ use blooms_db;
 use kvdb::KeyValueDB;
 #[cfg(any(test, feature = "test-helpers"))]
 use kvdb_rocksdb;
-use tempdir::TempDir;
+use parity_wasm_compat::tempdir::TempDir;
 use verification::queue::kind::blocks::Unverified;
 use encoded;
 
@@ -287,7 +287,6 @@ pub fn new_db() -> Arc<BlockChainDB> {
 			&self.trace_blooms
 		}
 	}
-
 	let blooms_dir = TempDir::new("").unwrap();
 	let trace_blooms_dir = TempDir::new("").unwrap();
 

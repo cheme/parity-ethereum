@@ -997,7 +997,7 @@ mod tests {
 	use state::State;
 	use test_helpers::get_temp_state_db;
 	use views::BlockView;
-	use tempdir::TempDir;
+	use parity_wasm_compat::tempdir::TempDir;
 
 	// https://github.com/paritytech/parity-ethereum/issues/1840
 	#[test]

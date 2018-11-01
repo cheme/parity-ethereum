@@ -6,10 +6,10 @@ authors = ["Parity Technologies <admin@parity.io>"]
 
 [dependencies]
 byteorder = "1.2"
-#ethbloom = "0.5"
-ethbloom = { git = "https://github.com/cheme/primitives", branch = "wasm-test" }
+ethbloom = "0.5"
 parking_lot = "0.6"
 tiny-keccak = "1.4"
+parity-wasm-compat = { git = "https://github.com/cheme/parity-common.git", branch = "wasm-test" }
 
 [dev-dependencies]
 tempdir = "0.3"
