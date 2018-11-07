@@ -137,3 +137,6 @@ members = [
 	"util/patricia-trie-ethereum",
 	"util/fastmap",
 ]
+
+[patch.crates-io]
+parity-crypto = { path = "../../parity-common/parity-crypto"  }

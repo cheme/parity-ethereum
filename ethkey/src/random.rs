@@ -15,7 +15,8 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 use rand::os::OsRng;
-use super::{Generator, KeyPair, SECP256K1};
+use parity_crypto::secp256k1::generate_keypair;
+use super::{Generator, KeyPair};
 
 /// Randomly generates new keypair, instantiating the RNG each time.
 pub struct Random;
@@ -36,8 +37,7 @@ impl Generator for OsRng {
 	type Error = ::Void;
 
 	fn generate(&mut self) -> Result<KeyPair, Self::Error> {
-		let (sec, publ) = SECP256K1.generate_keypair(self)
-			.expect("context always created with full capabilities; qed");
+		let (sec, publ) = generate_keypair(self);
 
 		Ok(KeyPair::from_keypair(sec, publ))
 	}

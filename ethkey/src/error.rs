@@ -63,12 +63,12 @@ impl Into<String> for Error {
 	}
 }
 
-impl From<::secp256k1::Error> for Error {
-	fn from(e: ::secp256k1::Error) -> Error {
+impl From<::parity_crypto::secp256k1::Error> for Error {
+	fn from(e: ::parity_crypto::secp256k1::Error) -> Error {
 		match e {
-			::secp256k1::Error::InvalidMessage => Error::InvalidMessage,
-			::secp256k1::Error::InvalidPublicKey => Error::InvalidPublic,
-			::secp256k1::Error::InvalidSecretKey => Error::InvalidSecret,
+			::parity_crypto::secp256k1::Error::InvalidMessage => Error::InvalidMessage,
+			::parity_crypto::secp256k1::Error::InvalidPublicKey => Error::InvalidPublic,
+			::parity_crypto::secp256k1::Error::InvalidSecretKey => Error::InvalidSecret,
 			_ => Error::InvalidSignature,
 		}
 	}

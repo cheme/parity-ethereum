@@ -209,8 +209,7 @@ impl ExtendedKeyPair {
 mod derivation {
 	use parity_crypto::hmac;
 	use ethereum_types::{U256, U512, H512, H256};
-	use secp256k1::key::{SecretKey, PublicKey};
-	use SECP256K1;
+	use parity_crypto::secp256k1;
 	use keccak;
 	use math::curve_order;
 	use super::{Label, Derivation};
@@ -257,15 +256,15 @@ mod derivation {
 	fn private_soft<T>(private_key: H256, chain_code: H256, index: T) -> (H256, H256) where T: Label {
 		let mut data = vec![0u8; 33 + T::len()];
 
-		let sec_private = SecretKey::from_slice(&SECP256K1, &*private_key)
+		let sec_private = secp256k1::secret_from_slice(&*private_key)
 			.expect("Caller should provide valid private key");
-		let sec_public = PublicKey::from_secret_key(&SECP256K1, &sec_private)
+		let sec_public = secp256k1::public_from_secret(&sec_private)
 			.expect("Caller should provide valid private key");
-		let public_serialized = sec_public.serialize_vec(&SECP256K1, true);
+		let public_serialized = secp256k1::public_to_compressed_vec(&sec_public);
 
 		// curve point (compressed public key) --  index
 		//             0.33                    --  33..end
-		data[0..33].copy_from_slice(&public_serialized);
+		data[0..33].copy_from_slice(public_serialized.as_ref());
 		index.store(&mut data[33..]);
 
 		hmac_pair(&data, private_key, chain_code)
@@ -304,16 +303,13 @@ mod derivation {
 			Derivation::Hard(_) => { return Err(Error::InvalidHardenedUse); }
 		};
 
-		let mut public_sec_raw = [0u8; 65];
-		public_sec_raw[0] = 4;
-		public_sec_raw[1..65].copy_from_slice(&*public_key);
-		let public_sec = PublicKey::from_slice(&SECP256K1, &public_sec_raw).map_err(|_| Error::InvalidPoint)?;
-		let public_serialized = public_sec.serialize_vec(&SECP256K1, true);
+		let public_sec = secp256k1::public_from_slice(&*public_key).map_err(|_| Error::InvalidPoint)?;
+		let public_serialized = secp256k1::public_to_compressed_vec(&public_sec);
 
 		let mut data = vec![0u8; 33 + T::len()];
 		// curve point (compressed public key) --  index
 		//             0.33                    --  33..end
-		data[0..33].copy_from_slice(&public_serialized);
+		data[0..33].copy_from_slice(public_serialized.as_ref());
 		index.store(&mut data[33..(33 + T::len())]);
 
 		// HMAC512SHA produces [derived private(256); new chain code(256)]
@@ -325,19 +321,19 @@ mod derivation {
 
 		// Generated private key can (extremely rarely) be out of secp256k1 key field
 		if curve_order() <= new_private.clone().into() { return Err(Error::MissingIndex); }
-		let new_private_sec = SecretKey::from_slice(&SECP256K1, &*new_private)
+		let new_private_sec = secp256k1::secret_from_slice(&*new_private)
 			.expect("Private key belongs to the field [0..CURVE_ORDER) (checked above); So initializing can never fail; qed");
-		let mut new_public = PublicKey::from_secret_key(&SECP256K1, &new_private_sec)
+		let new_public = secp256k1::public_from_secret(&new_private_sec)
 			.expect("Valid private key produces valid public key");
 
 		// Adding two points on the elliptic curves (combining two public keys)
-		new_public.add_assign(&SECP256K1, &public_sec)
+		let new_public = secp256k1::public_add(new_public, &public_sec)
 			.expect("Addition of two valid points produce valid point");
 
-		let serialized = new_public.serialize_vec(&SECP256K1, false);
+		let serialized = secp256k1::public_to_vec(&new_public);
 
 		Ok((
-			H512::from(&serialized[1..65]),
+			H512::from(serialized.as_ref()),
 			new_chain_code,
 		))
 	}
@@ -354,12 +350,12 @@ mod derivation {
 	}
 
 	pub fn point(secret: H256) -> Result<H512, Error> {
-		let sec = SecretKey::from_slice(&SECP256K1, &*secret)
+		let sec = secp256k1::secret_from_slice(&*secret)
 			.map_err(|_| Error::InvalidPoint)?;
-		let public_sec = PublicKey::from_secret_key(&SECP256K1, &sec)
+		let public_sec = secp256k1::public_from_secret(&sec)
 			.map_err(|_| Error::InvalidPoint)?;
-		let serialized = public_sec.serialize_vec(&SECP256K1, false);
-		Ok(H512::from(&serialized[1..65]))
+		let serialized = secp256k1::public_to_vec(&public_sec);
+		Ok(H512::from(serialized.as_ref()))
 	}
 
 	pub fn seed_pair(seed: &[u8]) -> (H256, H256) {
