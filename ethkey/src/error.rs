@@ -15,10 +15,14 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::{fmt, error};
+use parity_crypto::error::Error as CryptoError;
+use parity_crypto::error::SymmError;
 
 #[derive(Debug)]
 /// Crypto error
 pub enum Error {
+	/// Error from crypto crate
+	Crypto(CryptoError),
 	/// Invalid secret key
 	InvalidSecret,
 	/// Invalid public key
@@ -31,19 +35,24 @@ pub enum Error {
 	InvalidMessage,
 	/// IO Error
 	Io(::std::io::Error),
+  /// Symm enc error
+	Symm(SymmError),
 	/// Custom
 	Custom(String),
+	
 }
 
 impl fmt::Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let msg = match *self {
+			Error::Crypto(ref err) => format!("Crypto error: {}", err),
 			Error::InvalidSecret => "Invalid secret".into(),
 			Error::InvalidPublic => "Invalid public".into(),
 			Error::InvalidAddress => "Invalid address".into(),
 			Error::InvalidSignature => "Invalid EC signature".into(),
 			Error::InvalidMessage => "Invalid AES message".into(),
 			Error::Io(ref err) => format!("I/O error: {}", err),
+			Error::Symm(ref err) => format!("Symm error: {}", err),
 			Error::Custom(ref s) => s.clone(),
 		};
 
@@ -63,19 +72,22 @@ impl Into<String> for Error {
 	}
 }
 
-impl From<::parity_crypto::secp256k1::Error> for Error {
-	fn from(e: ::parity_crypto::secp256k1::Error) -> Error {
-		match e {
-			::parity_crypto::secp256k1::Error::InvalidMessage => Error::InvalidMessage,
-			::parity_crypto::secp256k1::Error::InvalidPublicKey => Error::InvalidPublic,
-			::parity_crypto::secp256k1::Error::InvalidSecretKey => Error::InvalidSecret,
-			_ => Error::InvalidSignature,
-		}
-	}
-}
-
 impl From<::std::io::Error> for Error {
 	fn from(err: ::std::io::Error) -> Error {
 		Error::Io(err)
 	}
 }
+
+impl From<CryptoError> for Error {
+	fn from(err: CryptoError) -> Error {
+		Error::Crypto(err)
+	}
+}
+
+impl From<SymmError> for Error {
+	fn from(err: SymmError) -> Error {
+		Error::Symm(err)
+	}
+}
+
+

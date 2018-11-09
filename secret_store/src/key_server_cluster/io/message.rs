@@ -26,6 +26,7 @@ use ethereum_types::{H256, U256};
 use key_server_cluster::Error;
 use key_server_cluster::message::{Message, ClusterMessage, GenerationMessage, EncryptionMessage, DecryptionMessage,
 	SchnorrSigningMessage, EcdsaSigningMessage, ServersSetChangeMessage, ShareAddMessage, KeyVersionNegotiationMessage};
+use crypto::traits::asym::SecretKey;
 
 /// Size of serialized header.
 pub const MESSAGE_HEADER_SIZE: usize = 18;
@@ -252,11 +253,12 @@ pub fn decrypt_message(key: &KeyPair, payload: Vec<u8>) -> Result<Vec<u8>, Error
 	Ok(ecies::decrypt(key.secret(), &[], &payload)?)
 }
 
-/// Fix shared encryption key.
+/// Fix shared encryption key. TODO compare with FixSharedSecret from crypto or move math to crypto
+/// anyway.
 pub fn fix_shared_key(shared_secret: &Secret) -> Result<KeyPair, Error> {
 	// secret key created in agree function is invalid, as it is not calculated mod EC.field.n
 	// => let's do it manually
-	let shared_secret: H256 = (**shared_secret).into();
+	let shared_secret: H256 = H256::from(&shared_secret.to_vec()[..]);
 	let shared_secret: U256 = shared_secret.into();
 	let shared_secret: H256 = (shared_secret % curve_order()).into();
 	let shared_key_pair = KeyPair::from_secret_slice(&*shared_secret)?;

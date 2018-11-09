@@ -44,11 +44,12 @@ use key_server_cluster::{NodeId, Error, NodeKeyPair};
 use key_server_cluster::message::{Message, ClusterMessage, NodePublicKey, NodePrivateKeySignature};
 use key_server_cluster::io::{write_message, write_encrypted_message, WriteMessage, ReadMessage,
 	read_message, read_encrypted_message, fix_shared_key};
+use crypto::traits::asym::{SecretKey};
 
 /// Start handshake procedure with another node from the cluster.
 pub fn handshake<A>(a: A, self_key_pair: Arc<NodeKeyPair>, trusted_nodes: BTreeSet<NodeId>) -> Handshake<A> where A: AsyncWrite + AsyncRead {
-	let init_data = Random.generate().map(|kp| *kp.secret().clone()).map_err(Into::into)
-		.and_then(|cp| Random.generate().map(|kp| (cp, kp)).map_err(Into::into));
+	let init_data = Random.generate().map(|kp| kp.secret().clone()).map_err(Into::into)
+		.and_then(|cp| Random.generate().map(|kp| (H256::from(&cp.to_vec()[..]), kp)).map_err(Into::into));
 	handshake_with_init_data(a, init_data, self_key_pair, trusted_nodes)
 }
 
@@ -80,9 +81,9 @@ pub fn handshake_with_init_data<A>(a: A, init_data: Result<(H256, KeyPair), Erro
 
 /// Wait for handshake procedure to be started by another node from the cluster.
 pub fn accept_handshake<A>(a: A, self_key_pair: Arc<NodeKeyPair>) -> Handshake<A> where A: AsyncWrite + AsyncRead {
-	let self_confirmation_plain = Random.generate().map(|kp| *kp.secret().clone()).map_err(Into::into);
+	let self_confirmation_plain = Random.generate().map(|kp| kp.secret().clone()).map_err(Into::into);
 	let handshake_input_data = self_confirmation_plain
-		.and_then(|cp| Random.generate().map(|kp| (cp, kp)).map_err(Into::into));
+		.and_then(|cp| Random.generate().map(|kp| (H256::from(&cp.to_vec()[..]), kp)).map_err(Into::into));
 
 	let (error, cp, kp, state) = match handshake_input_data {
 		Ok((cp, kp)) => (None, cp, Some(kp), HandshakeState::ReceivePublicKey(read_message(a))),
@@ -323,12 +324,13 @@ mod tests {
 	use key_server_cluster::io::message::tests::TestIo;
 	use key_server_cluster::message::{Message, ClusterMessage, NodePublicKey, NodePrivateKeySignature};
 	use super::{handshake_with_init_data, accept_handshake, HandshakeResult};
+	use crypto::traits::asym::SecretKey;
 
 	fn prepare_test_io() -> (H256, TestIo) {
 		let mut io = TestIo::new();
 
-		let self_confirmation_plain = *Random.generate().unwrap().secret().clone();
-		let peer_confirmation_plain = *Random.generate().unwrap().secret().clone();
+		let self_confirmation_plain = H256::from(&Random.generate().unwrap().secret().to_vec()[..]);
+		let peer_confirmation_plain = H256::from(&Random.generate().unwrap().secret().to_vec()[..]);
 
 		let self_confirmation_signed = sign(io.peer_key_pair().secret(), &self_confirmation_plain).unwrap();
 		let peer_confirmation_signed = sign(io.peer_session_key_pair().secret(), &peer_confirmation_plain).unwrap();

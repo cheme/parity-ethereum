@@ -18,26 +18,46 @@ use std::fmt;
 use std::ops::Deref;
 use std::str::FromStr;
 use rustc_hex::ToHex;
-use parity_crypto::secp256k1::{SECRET_KEY_SIZE as SECP256K1_SECRET_KEY_SIZE};
-use parity_crypto::secp256k1::{SecretKey, minus_one_key, one_key, self};
+use parity_crypto::secp256k1::Secp256k1;
+use parity_crypto::traits::asym::{Asym, SecretKey, FiniteField};
 use ethereum_types::H256;
-use mem::Memzero;
 use Error;
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Secret {
-	inner: Memzero<H256>,
+	pub inner: <Secp256k1 as Asym>::SecretKey,
+}
+
+// TODO use from
+//impl From<<Secp256k1 as Asym>::SecretKey> for Secret {
+impl Secret {
+	pub fn from_sec(inner: <Secp256k1 as Asym>::SecretKey) -> Self {
+		Secret { inner }
+	}
+}
+
+struct LHex<'a>(&'a[u8]);
+impl<'a> std::fmt::LowerHex for LHex<'a> {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		if f.alternate() {
+			write!(f, "0x")?;
+		}
+		for i in &self.0[..] {
+			write!(f, "{:02x}", i)?;
+		}
+		Ok(())
+	}
 }
 
 impl ToHex for Secret {
 	fn to_hex(&self) -> String {
-		format!("{:x}", *self.inner)
+		format!("{:x}", LHex(&self.inner.to_vec()[..]))
 	}
 }
 
 impl fmt::LowerHex for Secret {
 	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-		self.inner.fmt(fmt)
+		LHex(&self.inner.to_vec()[..]).fmt(fmt)
 	}
 }
 
@@ -49,7 +69,8 @@ impl fmt::Debug for Secret {
 
 impl fmt::Display for Secret {
 	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-		write!(fmt, "Secret: 0x{:x}{:x}..{:x}{:x}", self.inner[0], self.inner[1], self.inner[30], self.inner[31])
+		let v = self.inner.to_vec();
+		write!(fmt, "Secret: 0x{:x}{:x}..{:x}{:x}", v[0], v[1], v[30], v[31])
 	}
 }
 
@@ -59,25 +80,28 @@ impl Secret {
 		if key.len() != 32 {
 			return None
 		}
-		let mut h = H256::default();
-		h.copy_from_slice(&key[0..32]);
-		Some(Secret { inner: Memzero::from(h) })
+		let v = Secp256k1::secret_from_slice(key).ok();
+		v.map(|s|Secret::from_sec(s)) 
 	}
 
 	/// Creates zero key, which is invalid for crypto operations, but valid for math operation.
 	pub fn zero() -> Self {
-		Secret { inner: Memzero::from(H256::default()) }
+		Secret::from_sec(Secp256k1::zero_key().clone())
 	}
 
 	/// Imports and validates the key.
 	pub fn from_unsafe_slice(key: &[u8]) -> Result<Self, Error> {
-		let secret = secp256k1::secret_from_slice(key)?;
-		Ok(secret.into())
+		let secret = Secp256k1::secret_from_slice(key)?;
+		Ok(Secret::from_sec(secret))
 	}
 
 	/// Checks validity of this key.
 	pub fn check_validity(&self) -> Result<(), Error> {
 		self.to_secp256k1_secret().map(|_| ())
+	}
+
+	fn is_zero(&self) -> bool {
+		&self.inner == Secp256k1::zero_key()
 	}
 
 	/// Inplace add one secret key to another (scalar + scalar)
@@ -91,9 +115,9 @@ impl Secret {
 			(false, false) => {
 				let key_secret = self.to_secp256k1_secret()?;
 				let other_secret = other.to_secp256k1_secret()?;
-				let key_secret = secp256k1::secret_add(key_secret, &other_secret)?;
+				let key_secret = Secp256k1::secret_add(key_secret, &other_secret)?;
 
-				*self = key_secret.into();
+				*self = Secret::from_sec(key_secret);
 				Ok(())
 			},
 		}
@@ -110,10 +134,10 @@ impl Secret {
 			(false, false) => {
 				let key_secret = self.to_secp256k1_secret()?;
 				let other_secret = other.to_secp256k1_secret()?;
-				let other_secret = secp256k1::secret_mul(other_secret, minus_one_key())?;
-				let key_secret = secp256k1::secret_add(key_secret, &other_secret)?;
+				let other_secret = Secp256k1::secret_mul(other_secret, Secp256k1::minus_one_key())?;
+				let key_secret = Secp256k1::secret_add(key_secret, &other_secret)?;
 
-				*self = key_secret.into();
+				*self = Secret::from_sec(key_secret);
 				Ok(())
 			},
 		}
@@ -123,14 +147,15 @@ impl Secret {
 	pub fn dec(&mut self) -> Result<(), Error> {
 		match self.is_zero() {
 			true => {
-				*self = minus_one_key().clone().into();
+				let key_secret = Secp256k1::minus_one_key().clone();
+				*self = Secret::from_sec(key_secret);
 				Ok(())
 			},
 			false => {
 				let key_secret = self.to_secp256k1_secret()?;
-				let key_secret = secp256k1::secret_add(key_secret, minus_one_key())?;
+				let key_secret = Secp256k1::secret_add(key_secret, Secp256k1::minus_one_key())?;
 
-				*self = key_secret.into();
+				*self = Secret::from_sec(key_secret);
 				Ok(())
 			},
 		}
@@ -147,9 +172,9 @@ impl Secret {
 			(false, false) => {
 				let key_secret = self.to_secp256k1_secret()?;
 				let other_secret = other.to_secp256k1_secret()?;
-				let key_secret = secp256k1::secret_mul(key_secret, &other_secret)?;
+				let key_secret = Secp256k1::secret_mul(key_secret, &other_secret)?;
 
-				*self = key_secret.into();
+				*self = Secret::from_sec(key_secret);
 				Ok(())
 			},
 		}
@@ -161,9 +186,9 @@ impl Secret {
 			true => Ok(()),
 			false => {
 				let key_secret = self.to_secp256k1_secret()?;
-				let key_secret = secp256k1::secret_mul(key_secret, minus_one_key())?;
+				let key_secret = Secp256k1::secret_mul(key_secret, Secp256k1::minus_one_key())?;
 
-				*self = key_secret.into();
+				*self = Secret::from_sec(key_secret);
 				Ok(())
 			},
 		}
@@ -172,9 +197,9 @@ impl Secret {
 	/// Inplace inverse secret key (1 / scalar)
 	pub fn inv(&mut self) -> Result<(), Error> {
 		let key_secret = self.to_secp256k1_secret()?;
-		let key_secret = secp256k1::secret_inv(key_secret)?;
+		let key_secret = Secp256k1::secret_inv(key_secret)?;
 
-		*self = key_secret.into();
+		*self = Secret::from_sec(key_secret);
 		Ok(())
 	}
 
@@ -186,7 +211,7 @@ impl Secret {
 		}
 
 		match pow {
-			0 => *self = one_key().clone().into(),
+			0 => *self = Secret::from_sec(Secp256k1::one_key().clone()),
 			1 => (),
 			_ => {
 				let c = self.clone();
@@ -200,8 +225,8 @@ impl Secret {
 	}
 
 	/// Create `secp256k1::SecretKey` based on this secret
-	pub fn to_secp256k1_secret(&self) -> Result<SecretKey, Error> {
-		Ok(secp256k1::secret_from_slice(&self[..])?)
+	pub fn to_secp256k1_secret(&self) -> Result<<Secp256k1 as Asym>::SecretKey, Error> {
+		Ok(self.inner.clone())
 	}
 }
 
@@ -214,7 +239,8 @@ impl FromStr for Secret {
 
 impl From<[u8; 32]> for Secret {
 	fn from(k: [u8; 32]) -> Self {
-		Secret { inner: Memzero::from(H256(k)) }
+		let s = Secp256k1::secret_from_slice(&k[..]).expect("right size");
+		Secret::from_sec(s)
 	}
 }
 
@@ -230,16 +256,8 @@ impl From<&'static str> for Secret {
 	}
 }
 
-impl From<SecretKey> for Secret {
-	fn from(key: SecretKey) -> Self {
-		let mut a = [0; SECP256K1_SECRET_KEY_SIZE];
-		a.copy_from_slice(&secp256k1::secret_to_vec(&key).as_ref()[0 .. SECP256K1_SECRET_KEY_SIZE]);
-		a.into()
-	}
-}
-
 impl Deref for Secret {
-	type Target = H256;
+	type Target = <Secp256k1 as Asym>::SecretKey;
 
 	fn deref(&self) -> &Self::Target {
 		&self.inner

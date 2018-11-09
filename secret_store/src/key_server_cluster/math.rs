@@ -18,6 +18,8 @@ use ethkey::{Public, Secret, Signature, Random, Generator, math};
 use ethereum_types::{H256, U256};
 use hash::keccak;
 use key_server_cluster::Error;
+use crypto::traits::asym::SecretKey;
+use crypto::clear_on_drop::clear::Clear;
 
 /// Encryption result.
 #[derive(Debug)]
@@ -416,7 +418,7 @@ pub fn compute_schnorr_signature<'a, I>(signature_shares: I) -> Result<Secret, E
 
 /// Locally compute Schnorr signature as described in https://en.wikipedia.org/wiki/Schnorr_signature#Signing.
 #[cfg(test)]
-pub fn local_compute_schnorr_signature(nonce: &Secret, secret: &Secret, message_hash: &Secret) -> Result<(Secret, Secret), Error> {
+pub fn local_compute_schnorr_signature(nonce: &Secret, secret: &Secret, message_hash: &H256) -> Result<(Secret, Secret), Error> {
 	let mut nonce_public = math::generation_point();
 	math::public_mul_secret(&mut nonce_public, &nonce).unwrap();
 
@@ -473,22 +475,25 @@ pub fn compute_ecdsa_s(t: usize, signature_s_shares: &[Secret], id_numbers: &[Se
 		&id_numbers.iter().take(double_t + 1).collect::<Vec<_>>())
 }
 
-/// Serialize ECDSA signature to [r][s]v form.
-pub fn serialize_ecdsa_signature(nonce_public: &Public, signature_r: Secret, mut signature_s: Secret) -> Signature {
+/// Serialize ECDSA signature to [r][s]v form. TODO is it standard, get a fn.
+pub fn serialize_ecdsa_signature(nonce_public: &Public, signature_r: Secret, signature_s: Secret) -> Signature {
+  let mut signature_r = H256::from(&signature_r.to_vec()[..]);
+  let mut signature_s = H256::from(&signature_s.to_vec()[..]);
 	// compute recovery param
 	let mut signature_v = {
 		let nonce_public_x = public_x(nonce_public);
 		let nonce_public_y: U256 = public_y(nonce_public).into();
 		let nonce_public_y_is_odd = !(nonce_public_y % 2).is_zero();
 		let bit0 = if nonce_public_y_is_odd { 1u8 } else { 0u8 };
-		let bit1 = if nonce_public_x != *signature_r { 2u8 } else { 0u8 };
+		let bit1 = if nonce_public_x != signature_r { 2u8 } else { 0u8 };
 		bit0 | bit1
 	};
 
 	// fix high S
 	let curve_order = math::curve_order();
 	let curve_order_half = curve_order / 2;
-	let s_numeric: U256 = (*signature_s).into();
+  // TODO put those U256 calc in crypto crate
+	let s_numeric: U256 = signature_s.into();
 	if s_numeric > curve_order_half {
 		let signature_s_hash: H256 = (curve_order - s_numeric).into();
 		signature_s = signature_s_hash.into();
@@ -497,8 +502,10 @@ pub fn serialize_ecdsa_signature(nonce_public: &Public, signature_r: Secret, mut
 
 	// serialize as [r][s]v
 	let mut signature = [0u8; 65];
-	signature[..32].copy_from_slice(&**signature_r);
-	signature[32..64].copy_from_slice(&**signature_s);
+	signature[..32].copy_from_slice(&signature_r);
+	signature[32..64].copy_from_slice(&signature_s);
+  Clear::clear(&mut signature_r);
+  Clear::clear(&mut signature_s);
 	signature[64] = signature_v;
 
 	signature.into()
@@ -815,7 +822,7 @@ pub mod tests {
 			(1, 10), (2, 10), (3, 10), (4, 10), (5, 10), (6, 10), (7, 10), (8, 10), (9, 10)];
 		for &(t, n) in &test_cases {
 			// hash of the message to be signed
-			let message_hash: Secret = "0000000000000000000000000000000000000000000000000000000000000042".parse().unwrap();
+			let message_hash: H256 = "0000000000000000000000000000000000000000000000000000000000000042".parse().unwrap();
 
 			// === MiDS-S algorithm ===
 			// setup: all nodes share master secret key && every node knows master public key

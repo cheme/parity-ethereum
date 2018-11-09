@@ -14,56 +14,30 @@
 // You should have received a copy of the GNU General Public License
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
-use parity_crypto::secp256k1;
-use std::io;
-use parity_crypto::error::SymmError;
+pub use error::Error;
 
-quick_error! {
-	#[derive(Debug)]
-	pub enum Error {
-		Secp(e: secp256k1::Error) {
-			// TODO alternate secp256k1 pr to add display trait
-			// on error or stick to debug
-			display("secp256k1 error: {:?}", e)
-			// TODO add a specific uniqueerror type in parity crypto that implement Error (or not)
-      // cause(e)
-			from()
-		}
-		Io(e: io::Error) {
-			display("i/o error: {}", e)
-			cause(e)
-			from()
-		}
-		InvalidMessage {
-			display("invalid message")
-		}
-		Symm(e: SymmError) {
-			cause(e)
-			from()
-		}
-	}
-}
 
 /// ECDH functions
 pub mod ecdh {
-	use parity_crypto::secp256k1;
+	use parity_crypto::secp256k1::Secp256k1;
+	use parity_crypto::traits::asym::{Asym, FixAsymSharedSecret};
 	use super::Error;
 	use {Secret, Public};
 
 	/// Agree on a shared secret
 	pub fn agree(secret: &Secret, public: &Public) -> Result<Secret, Error> {
 
-		let publ = secp256k1::public_from_slice(&public[0..64])?;
-		let sec = secp256k1::secret_from_slice(&secret)?;
-		let shared = secp256k1::shared_secret(&publ, &sec)?;
-		Secret::from_unsafe_slice(&shared.as_ref()[0..32])
-			.map_err(|_| Error::Secp(secp256k1::Error::InvalidSecretKey))
+		let publ = Secp256k1::public_from_slice(&public[0..64])?;
+		let shared = secret.shared_secret(&publ)?;
+		Ok(Secret::from_unsafe_slice(&shared.as_ref()[0..32])?)
 	}
 }
 
 /// ECIES function
 pub mod ecies {
 	use parity_crypto::{aes, digest, hmac, is_equal};
+	use parity_crypto::traits::asym::{SecretKey};
+	use parity_crypto::clear_on_drop::clear::Clear;
 	use ethereum_types::H128;
 	use super::{ecdh, Error};
 	use {Random, Generator, Public, Secret};
@@ -148,17 +122,21 @@ pub mod ecies {
 		// the 4 bytes is okay. NIST specifies 4 bytes.
 		let mut ctr = 1u32;
 		let mut written = 0usize;
+    let mut buf_secret = [0;32];
+    buf_secret.copy_from_slice(&secret.inner.to_vec()[..]);
+
 		while written < dest.len() {
 			let mut hasher = digest::Hasher::sha256();
 			let ctrs = [(ctr >> 24) as u8, (ctr >> 16) as u8, (ctr >> 8) as u8, ctr as u8];
 			hasher.update(&ctrs);
-			hasher.update(secret);
+			hasher.update(&buf_secret);
 			hasher.update(s1);
 			let d = hasher.finish();
 			&mut dest[written..(written + 32)].copy_from_slice(&d);
 			written += 32;
 			ctr += 1;
 		}
+    Clear::clear(&mut buf_secret[..]);
 	}
 }
 

@@ -23,6 +23,7 @@ use ethkey::{Secret, Public, public_to_address};
 use kvdb::KeyValueDB;
 use types::{Error, ServerKeyId, NodeId};
 use serialization::{SerializablePublic, SerializableSecret, SerializableH256, SerializableAddress};
+use crypto::traits::asym::SecretKey;
 
 /// Key of version value.
 const DB_META_KEY_VERSION: &'static [u8; 7] = b"version";
@@ -199,7 +200,7 @@ fn upgrade_db(db: Arc<KeyValueDB>) -> Result<Arc<KeyValueDB>, Error> {
 					common_point: Some(v0_key.common_point),
 					encrypted_point: Some(v0_key.encrypted_point),
 					versions: vec![CurrentSerializableDocumentKeyVersion {
-						hash: DocumentKeyShareVersion::data_hash(v0_key.id_numbers.iter().map(|(k, v)| (&***k, &****v))).into(),
+						hash: DocumentKeyShareVersion::data_hash(v0_key.id_numbers.iter().map(|(k, v)| (&***k, &v.0))).into(),
 						id_numbers: v0_key.id_numbers,
 						secret_share: v0_key.secret_share,
 					}],
@@ -222,7 +223,7 @@ fn upgrade_db(db: Arc<KeyValueDB>) -> Result<Arc<KeyValueDB>, Error> {
 					common_point: v1_key.common_point,
 					encrypted_point: v1_key.encrypted_point,
 					versions: vec![CurrentSerializableDocumentKeyVersion {
-						hash: DocumentKeyShareVersion::data_hash(v1_key.id_numbers.iter().map(|(k, v)| (&***k, &****v))).into(),
+						hash: DocumentKeyShareVersion::data_hash(v1_key.id_numbers.iter().map(|(k, v)| (&***k, &v.0))).into(),
 						id_numbers: v1_key.id_numbers,
 						secret_share: v1_key.secret_share,
 					}],
@@ -316,8 +317,8 @@ impl<'a> Iterator for PersistentKeyStorageIterator<'a> {
 	fn next(&mut self) -> Option<(ServerKeyId, DocumentKeyShare)> {
 		self.iter.as_mut().next()
 			.and_then(|(db_key, db_val)| serde_json::from_slice::<CurrentSerializableDocumentKeyShare>(&db_val)
-					  .ok()
-					  .map(|key| ((*db_key).into(), key.into())))
+				.ok()
+				.map(|key| ((*db_key).into(), key.into())))
 	}
 }
 
@@ -342,19 +343,19 @@ impl DocumentKeyShareVersion {
 	/// Create new version
 	pub fn new(id_numbers: BTreeMap<NodeId, Secret>, secret_share: Secret) -> Self {
 		DocumentKeyShareVersion {
-			hash: Self::data_hash(id_numbers.iter().map(|(k, v)| (&**k, &***v))),
+			hash: Self::data_hash(id_numbers.iter().map(|(k, v)| (&k[..], v))),
 			id_numbers: id_numbers,
 			secret_share: secret_share,
 		}
 	}
 
 	/// Calculate hash of given version data.
-	pub fn data_hash<'a, I>(id_numbers: I) -> H256 where I: Iterator<Item=(&'a [u8], &'a [u8])> {
+	pub fn data_hash<'a, I>(id_numbers: I) -> H256 where I: Iterator<Item=(&'a [u8], &'a Secret)> {
 		let mut nodes_keccak = Keccak::new_keccak256();
 
 		for (node, node_number) in id_numbers {
 			nodes_keccak.update(node);
-			nodes_keccak.update(node_number);
+			nodes_keccak.update(&node_number.to_vec()[..]);
 		}
 
 		let mut nodes_keccak_value = [0u8; 32];

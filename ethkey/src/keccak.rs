@@ -18,6 +18,7 @@ use tiny_keccak::Keccak;
 
 pub trait Keccak256<T> {
 	fn keccak256(&self) -> T where T: Sized;
+	fn keccak256_inplace(&self, &mut [u8]);
 }
 
 impl Keccak256<[u8; 32]> for [u8] {
@@ -27,5 +28,11 @@ impl Keccak256<[u8; 32]> for [u8] {
 		keccak.update(self);
 		keccak.finalize(&mut result);
 		result
+	}
+
+	fn keccak256_inplace(&self, result: &mut [u8]) {
+		let mut keccak = Keccak::new_keccak256();
+		keccak.update(self);
+		keccak.finalize(&mut result[..]);
 	}
 }

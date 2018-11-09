@@ -26,6 +26,8 @@ use node_table::NodeId;
 use io::{IoContext, StreamToken};
 use ethkey::{KeyPair, Public, Secret, recover, sign, Generator, Random};
 use ethkey::crypto::{ecdh, ecies};
+use crypto::traits::asym::SecretKey;
+use crypto::clear_on_drop::clear::Clear;
 use network::{Error, ErrorKind};
 use host::HostInfo;
 
@@ -152,9 +154,11 @@ impl Handshake {
 		self.id.clone_from_slice(remote_public);
 		self.remote_nonce.clone_from_slice(remote_nonce);
 		self.remote_version = remote_version;
-		let shared = *ecdh::agree(host_secret, &self.id)?;
+		let mut shared = H256::from(&ecdh::agree(host_secret, &self.id)?.to_vec()[..]);
 		let signature = H520::from_slice(sig);
-		self.remote_ephemeral = recover(&signature.into(), &(shared ^ self.remote_nonce))?;
+		let sh_nonce = shared ^ self.remote_nonce;
+		Clear::clear(&mut shared[..]);
+		self.remote_ephemeral = recover(&signature.into(), &(sh_nonce))?;
 		Ok(())
 	}
 
@@ -258,8 +262,10 @@ impl Handshake {
 			let (nonce, _) = rest.split_at_mut(32);
 
 			// E(remote-pubk, S(ecdhe-random, ecdh-shared-secret^nonce) || H(ecdhe-random-pubk) || pubk || nonce || 0x0)
-			let shared = *ecdh::agree(secret, &self.id)?;
-			sig.copy_from_slice(&*sign(self.ecdhe.secret(), &(shared ^ self.nonce))?);
+			let mut shared = H256::from(&ecdh::agree(secret, &self.id)?.to_vec()[..]);
+			let sh_nonce = shared ^ self.nonce;
+			Clear::clear(&mut shared[..]);
+			sig.copy_from_slice(&*sign(self.ecdhe.secret(), &(sh_nonce))?);
 			write_keccak(self.ecdhe.public(), hepubk);
 			pubk.copy_from_slice(public);
 			nonce.copy_from_slice(&self.nonce);

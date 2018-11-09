@@ -20,9 +20,7 @@ extern crate byteorder;
 extern crate edit_distance;
 extern crate parity_crypto;
 extern crate ethereum_types;
-extern crate mem;
 extern crate parity_wordlist;
-#[macro_use]
 extern crate quick_error;
 extern crate rand;
 extern crate rustc_hex;

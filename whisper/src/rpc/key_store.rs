@@ -23,7 +23,7 @@ use std::collections::HashMap;
 
 use ethereum_types::H256;
 use ethkey::{KeyPair, Public, Secret};
-use mem::Memzero;
+use crypto::Memzero;
 use rand::{Rng, OsRng};
 
 use rpc::crypto::{AES_KEY_LEN, EncryptionInstance, DecryptionInstance};
@@ -40,11 +40,10 @@ pub enum Key {
 
 impl Key {
 	/// Generate a random asymmetric key with the given cryptographic RNG.
+	/// TODO should return an error
 	pub fn new_asymmetric(rng: &mut OsRng) -> Self {
-		match ::ethkey::Generator::generate(rng) {
-			Ok(pair) => Key::Asymmetric(pair),
-			Err(void) => match void {},
-		}
+		Key::Asymmetric(::ethkey::Generator::generate(rng)
+			.expect("can fail"))
 	}
 
 	/// Generate a random symmetric key with the given cryptographic RNG.
@@ -79,7 +78,7 @@ impl Key {
 	}
 
 	/// Get a handle to the symmetric key.
-	pub fn symmetric(&self) -> Option<&[u8; AES_KEY_LEN]>  {
+	pub fn symmetric(&self) -> Option<&[u8; AES_KEY_LEN]> {
 		match *self {
 			Key::Asymmetric(_) => None,
 			Key::Symmetric(ref key) => Some(key),

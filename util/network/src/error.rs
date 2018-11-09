@@ -179,12 +179,6 @@ impl From<ethkey::Error> for Error {
 	}
 }
 
-impl From<ethkey::crypto::Error> for Error {
-	fn from(_err: ethkey::crypto::Error) -> Self {
-		ErrorKind::Auth.into()
-	}
-}
-
 impl From<crypto::error::SymmError> for Error {
 	fn from(_err: crypto::error::SymmError) -> Self {
 		ErrorKind::Auth.into()

@@ -15,7 +15,8 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::fmt;
-use parity_crypto::secp256k1::{self, SecretKey, PublicKey};
+use parity_crypto::secp256k1::Secp256k1;
+use parity_crypto::traits::asym::{Asym, PublicKey};
 use rustc_hex::ToHex;
 use keccak::Keccak256;
 use super::{Secret, Public, Address, Error};
@@ -45,16 +46,15 @@ impl fmt::Display for KeyPair {
 impl KeyPair {
 	/// Create a pair from secret key
 	pub fn from_secret(secret: Secret) -> Result<KeyPair, Error> {
-		let s: SecretKey = secp256k1::secret_from_slice(&secret[..])?;
-		let pub_key = secp256k1::public_from_secret(&s)?;
-		let serialized = secp256k1::public_to_vec(&pub_key);
+		let pub_key = Secp256k1::public_from_secret(&secret)?;
+		let serialized = pub_key.to_vec();
 
 		let mut public = Public::default();
 		public.copy_from_slice(serialized.as_ref());
 
 		let keypair = KeyPair {
-			secret: secret,
-			public: public,
+			secret,
+			public,
 		};
 
 		Ok(keypair)
@@ -64,12 +64,12 @@ impl KeyPair {
 		Self::from_secret(Secret::from_unsafe_slice(slice)?)
 	}
 
-	pub fn from_keypair(sec: SecretKey, publ: PublicKey) -> Self {
-		let serialized = secp256k1::public_to_vec(&publ);
-		let secret = Secret::from(sec);
+	pub fn from_keypair(sec: <Secp256k1 as Asym>::SecretKey, publ: <Secp256k1 as Asym>::PublicKey) -> Self {
+		let serialized = publ.to_vec();
 		let mut public = Public::default();
 		public.copy_from_slice(serialized.as_ref());
 
+		let secret = Secret::from_sec(sec);
 		KeyPair {
 			secret: secret,
 			public: public,

@@ -15,7 +15,10 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 use rand::os::OsRng;
-use parity_crypto::secp256k1::generate_keypair;
+use rand::Rng;
+use parity_crypto::secp256k1::Secp256k1;
+use parity_crypto::traits::asym::Asym;
+use parity_crypto::clear_on_drop::clear::Clear;
 use super::{Generator, KeyPair};
 
 /// Randomly generates new keypair, instantiating the RNG each time.
@@ -28,16 +31,19 @@ impl Generator for Random {
 		let mut rng = OsRng::new()?;
 		match rng.generate() {
 			Ok(pair) => Ok(pair),
-			Err(void) => match void {}, // LLVM unreachable
+			Err(err) => Err(::std::io::Error::new(::std::io::ErrorKind::Other, err.to_string())),
 		}
 	}
 }
 
 impl Generator for OsRng {
-	type Error = ::Void;
+	type Error = parity_crypto::Error;
 
 	fn generate(&mut self) -> Result<KeyPair, Self::Error> {
-		let (sec, publ) = generate_keypair(self);
+		let mut sec_buf = vec![0; Secp256k1::SECRET_SIZE];
+		self.fill_bytes(&mut sec_buf[..]);
+		let (sec, publ) = Secp256k1::keypair_from_slice(&mut sec_buf)?;
+		Clear::clear(&mut sec_buf[..]);
 
 		Ok(KeyPair::from_keypair(sec, publ))
 	}

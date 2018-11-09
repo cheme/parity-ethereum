@@ -602,6 +602,8 @@ mod tests {
 	use key_server_cluster::message::{Message, KeyVersionNegotiationMessage, RequestKeyVersions, KeyVersions};
 	use super::{SessionImpl, SessionTransport, SessionParams, FastestResultComputer, LargestSupportResultComputer,
 		SessionResultComputer, SessionState, ContinueAction, FailedContinueAction};
+	use ethereum_types::H256;
+	use crypto::traits::asym::SecretKey;
 
 	struct DummyTransport {
 		cluster: Arc<DummyCluster>,
@@ -767,7 +769,7 @@ mod tests {
 		ml.session(0).initialize(ml.nodes.keys().cloned().collect()).unwrap();
 		assert_eq!(ml.session(0).data.lock().state, SessionState::WaitingForResponses);
 
-		let version_id = (*math::generate_random_scalar().unwrap()).clone();
+		let version_id = H256::from(&math::generate_random_scalar().unwrap().to_vec()[..]);
 		assert_eq!(ml.session(0).process_message(ml.node_id(1), &KeyVersionNegotiationMessage::KeyVersions(KeyVersions {
 			session: Default::default(),
 			sub_session: math::generate_random_scalar().unwrap().into(),
@@ -792,7 +794,7 @@ mod tests {
 		let ml = MessageLoop::empty(3);
 		ml.session(0).initialize(ml.nodes.keys().cloned().collect()).unwrap();
 
-		let version_id = (*math::generate_random_scalar().unwrap()).clone();
+		let version_id = H256::from(&math::generate_random_scalar().unwrap().to_vec()[..]);
 		assert_eq!(ml.session(0).process_message(ml.node_id(1), &KeyVersionNegotiationMessage::KeyVersions(KeyVersions {
 			session: Default::default(),
 			sub_session: math::generate_random_scalar().unwrap().into(),
@@ -814,7 +816,7 @@ mod tests {
 		let ml = MessageLoop::empty(2);
 		ml.session(0).initialize(ml.nodes.keys().cloned().collect()).unwrap();
 
-		let version_id = (*math::generate_random_scalar().unwrap()).clone();
+		let version_id = H256::from(&math::generate_random_scalar().unwrap().to_vec()[..]);
 		assert_eq!(ml.session(0).process_message(ml.node_id(1), &KeyVersionNegotiationMessage::KeyVersions(KeyVersions {
 			session: Default::default(),
 			sub_session: math::generate_random_scalar().unwrap().into(),
@@ -827,7 +829,7 @@ mod tests {
 	#[test]
 	fn fast_negotiation_does_not_completes_instantly_when_enough_share_owners_are_connected() {
 		let nodes = MessageLoop::prepare_nodes(2);
-		let version_id = (*math::generate_random_scalar().unwrap()).clone();
+		let version_id = H256::from(&math::generate_random_scalar().unwrap().to_vec()[..]);
 		nodes.values().nth(0).unwrap().insert(Default::default(), DocumentKeyShare {
 			author: Default::default(),
 			threshold: 1,

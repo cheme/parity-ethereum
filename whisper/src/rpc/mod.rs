@@ -28,7 +28,8 @@ use jsonrpc_pubsub::{Session, PubSubMetadata, SubscriptionId};
 use jsonrpc_macros::pubsub;
 
 use ethereum_types::H256;
-use mem::Memzero;
+use crypto::Memzero;
+use crypto::traits::asym::SecretKey;
 use parking_lot::RwLock;
 
 use self::filter::Filter;
@@ -254,7 +255,7 @@ impl<P: PoolHandle + 'static, M: Send + Sync + 'static> Whisper for WhisperClien
 
 	fn get_private(&self, id: types::Identity) -> Result<types::Private, Error> {
 		self.store.read().secret(&id.into_inner())
-			.map(|x| (&**x).clone())
+			.map(|x| H256::from(&x.to_vec()[..]))
 			.map(HexEncode)
 			.ok_or_else(|| whisper_error("Unknown identity"))
 	}

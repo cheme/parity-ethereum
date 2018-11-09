@@ -21,6 +21,8 @@ use std::collections::{VecDeque, BTreeMap, BTreeSet};
 use parking_lot::{Mutex, RwLock, Condvar};
 use ethereum_types::H256;
 use ethkey::Secret;
+use crypto::clear_on_drop::clear::Clear;
+use crypto::traits::asym::SecretKey;
 use key_server_cluster::{Error, NodeId, SessionId, Requester};
 use key_server_cluster::cluster::{Cluster, ClusterData, ClusterConfiguration, ClusterView};
 use key_server_cluster::connection_trigger::ServersSetChangeSessionCreatorConnector;
@@ -487,7 +489,15 @@ impl PartialOrd for SessionIdWithSubSession {
 impl Ord for SessionIdWithSubSession {
 	fn cmp(&self, other: &Self) -> ::std::cmp::Ordering {
 		match self.id.cmp(&other.id) {
-			::std::cmp::Ordering::Equal => self.access_key.cmp(&other.access_key),
+			::std::cmp::Ordering::Equal => {
+        // inefficient but only for id equal case
+        let mut self_a = H256::from(&self.access_key.to_vec()[..]);
+        let mut oth_a = H256::from(&other.access_key.to_vec()[..]);
+        let res = self_a.cmp(&oth_a);
+        Clear::clear(&mut self_a[..]);
+        Clear::clear(&mut oth_a[..]);
+        res
+      },
 			r @ _ => r,
 		}
 	}
