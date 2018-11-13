@@ -236,10 +236,6 @@ impl ServiceContractListener {
 			},
 			&ServiceTask::StoreDocumentKey(origin, server_key_id, author, common_point, encrypted_point) => {
 				data.retry_data.lock().affected_document_keys.insert((server_key_id.clone(), author.clone()));
-				let common_point = Public::from_slice(&common_point[..])
-					.map_err(|e| format!("Invalid common point : {:?}", e))?;
-				let encrypted_point = Public::from_slice(&encrypted_point[..])
-					.map_err(|e| format!("Invalid encrypted point : {:?}", e))?;
 				log_service_task_result(&task, data.self_key_pair.public(),
 					Self::store_document_key(&data, origin, &server_key_id, &author, &common_point, &encrypted_point))
 			},
@@ -320,7 +316,7 @@ impl ServiceContractListener {
 	}
 
 	/// Process server key generation result.
-	fn process_server_key_generation_result(data: &Arc<ServiceContractListenerData>, origin: Address, server_key_id: &ServerKeyId, result: Result<Option<Public>, Error>) -> Result<(), String> {
+	fn process_server_key_generation_result(data: &Arc<ServiceContractListenerData>, origin: Address, server_key_id: &ServerKeyId, result: Result<Option<NodeId>, Error>) -> Result<(), String> {
 		match result {
 			Ok(None) => Ok(()),
 			Ok(Some(server_key)) => {
@@ -358,7 +354,7 @@ impl ServiceContractListener {
 	}
 
 	/// Store document key.
-	fn store_document_key(data: &Arc<ServiceContractListenerData>, origin: Address, server_key_id: &ServerKeyId, author: &Address, common_point: &Public, encrypted_point: &Public) -> Result<(), String> {
+	fn store_document_key(data: &Arc<ServiceContractListenerData>, origin: Address, server_key_id: &ServerKeyId, author: &Address, common_point: &NodeId, encrypted_point: &NodeId) -> Result<(), String> {
 		let store_result = data.key_storage.get(server_key_id)
 			.and_then(|key_share| key_share.ok_or(Error::ServerKeyIsNotFound))
 			.and_then(|key_share| check_encrypted_data(Some(&key_share)).map(|_| key_share).map_err(Into::into))
@@ -384,13 +380,13 @@ impl ServiceContractListener {
 		let retrieval_result = data.acl_storage.check(requester.clone(), server_key_id)
 			.and_then(|is_allowed| if !is_allowed { Err(Error::AccessDenied) } else { Ok(()) })
 			.and_then(|_| data.key_storage.get(server_key_id).and_then(|key_share| key_share.ok_or(Error::ServerKeyIsNotFound)))
-			.and_then(|key_share| key_share.common_point.clone()
+			.and_then(|key_share| key_share.common_point
 				.ok_or(Error::DocumentKeyIsNotFound)
 				.and_then(|common_point| math::make_common_shadow_point(key_share.threshold, common_point))
 				.map(|common_point| (common_point, key_share.threshold)));
 		match retrieval_result {
 			Ok((common_point, threshold)) => {
-				data.contract.publish_retrieved_document_key_common(&origin, server_key_id, requester, common_point, threshold)
+				data.contract.publish_retrieved_document_key_common(&origin, server_key_id, requester, common_point.into(), threshold)
 			},
 			Err(ref error) if error.is_non_fatal() => Err(format!("{}", error)),
 			Err(ref error) => {
@@ -410,7 +406,7 @@ impl ServiceContractListener {
 	}
 
 	/// Process document key retrieval result.
-	fn process_document_key_retrieval_result(data: &Arc<ServiceContractListenerData>, origin: Address, server_key_id: &ServerKeyId, requester: &Address, result: Result<Option<(Vec<Address>, Public, Bytes)>, Error>) -> Result<(), String> {
+	fn process_document_key_retrieval_result(data: &Arc<ServiceContractListenerData>, origin: Address, server_key_id: &ServerKeyId, requester: &Address, result: Result<Option<(Vec<Address>, NodeId, Bytes)>, Error>) -> Result<(), String> {
 		match result {
 			Ok(None) => Ok(()),
 			Ok(Some((participants, decrypted_secret, shadow))) => {
@@ -495,7 +491,7 @@ impl ClusterSessionsListener<DecryptionSession> for ServiceContractListener {
 							broadcast_shadows.get(&self.data.self_key_pair.public().as_ref().into())
 								.map(|self_shadow| (
 									broadcast_shadows.keys().map(|k|array_to_address(&k[..])).collect(),
-									key_shadow.decrypted_secret,
+									key_shadow.decrypted_secret.into(),
 									self_shadow.clone()
 								)))
 				).map_err(Into::into);
@@ -606,7 +602,7 @@ mod tests {
 		let key_storage = Arc::new(DummyKeyStorage::default());
 		let mut key_share = DocumentKeyShare::default();
 		key_share.public = KeyPair::from_secret("0000000000000000000000000000000000000000000000000000000000000001"
-			.parse().unwrap()).unwrap().public().clone();
+			.parse().unwrap()).unwrap().public().clone().into();
 		if has_doc_key {
 			key_share.common_point = Some(Default::default());
 			key_share.encrypted_point = Some(Default::default());
@@ -896,7 +892,7 @@ mod tests {
 		ServiceContractListener::process_service_task(&listener.data, ServiceTask::RetrieveServerKey(
 			Default::default(), Default::default())).unwrap();
 		assert_eq!(*contract.retrieved_server_keys.lock(), vec![(Default::default(),
-			KeyPair::from_secret("0000000000000000000000000000000000000000000000000000000000000001".parse().unwrap()).unwrap().public().clone(), 0)]);
+			KeyPair::from_secret("0000000000000000000000000000000000000000000000000000000000000001".parse().unwrap()).unwrap().public().into(), 0)]);
 	}
 
 	#[test]

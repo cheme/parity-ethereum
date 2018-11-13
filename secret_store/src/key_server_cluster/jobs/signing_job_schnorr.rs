@@ -15,7 +15,7 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::collections::{BTreeSet, BTreeMap};
-use ethkey::{Public, Secret};
+use ethkey::Secret;
 use ethereum_types::H256;
 use key_server_cluster::{Error, NodeId, DocumentKeyShare};
 use key_server_cluster::math;
@@ -30,7 +30,7 @@ pub struct SchnorrSigningJob {
 	/// Key version.
 	key_version: H256,
 	/// Session public key.
-	session_public: Public,
+	session_public: NodeId,
 	/// Session secret coefficient.
 	session_secret_coeff: Secret,
 	/// Request id.
@@ -59,7 +59,7 @@ pub struct SchnorrPartialSigningResponse {
 }
 
 impl SchnorrSigningJob {
-	pub fn new_on_slave(self_node_id: NodeId, key_share: DocumentKeyShare, key_version: H256, session_public: Public, session_secret_coeff: Secret) -> Result<Self, Error> {
+	pub fn new_on_slave(self_node_id: NodeId, key_share: DocumentKeyShare, key_version: H256, session_public: NodeId, session_secret_coeff: Secret) -> Result<Self, Error> {
 		Ok(SchnorrSigningJob {
 			self_node_id: self_node_id,
 			key_share: key_share,
@@ -71,7 +71,7 @@ impl SchnorrSigningJob {
 		})
 	}
 
-	pub fn new_on_master(self_node_id: NodeId, key_share: DocumentKeyShare, key_version: H256, session_public: Public, session_secret_coeff: Secret, message_hash: H256) -> Result<Self, Error> {
+	pub fn new_on_master(self_node_id: NodeId, key_share: DocumentKeyShare, key_version: H256, session_public: NodeId, session_secret_coeff: Secret, message_hash: H256) -> Result<Self, Error> {
 		Ok(SchnorrSigningJob {
 			self_node_id: self_node_id,
 			key_share: key_share,
@@ -116,7 +116,7 @@ impl JobExecutor for SchnorrSigningJob {
 
 		let self_id_number = &key_version.id_numbers[&self.self_node_id];
 		let other_id_numbers = partial_request.other_nodes_ids.iter().map(|n| &key_version.id_numbers[n]);
-		let combined_hash = math::combine_message_hash_with_public(&partial_request.message_hash, &self.session_public)?;
+		let combined_hash = math::combine_message_hash_with_public(&partial_request.message_hash, self.session_public.as_ref())?;
 		Ok(JobPartialRequestAction::Respond(SchnorrPartialSigningResponse {
 			request_id: partial_request.id,
 			partial_signature: math::compute_schnorr_signature_share(
@@ -143,7 +143,7 @@ impl JobExecutor for SchnorrSigningJob {
 		let message_hash = self.message_hash.as_ref()
 			.expect("compute_response is only called on master nodes; message_hash is filed in constructor on master nodes; qed");
 
-		let signature_c = math::combine_message_hash_with_public(message_hash, &self.session_public)?;
+		let signature_c = math::combine_message_hash_with_public(message_hash, &self.session_public[..])?;
 		let signature_s = math::compute_schnorr_signature(partial_responses.values().map(|r| &r.partial_signature))?;
 
 		Ok((signature_c, signature_s))

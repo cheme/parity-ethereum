@@ -291,8 +291,8 @@ impl<A> Future for Handshake<A> where A: AsyncRead + AsyncWrite {
 				};
 
 				let peer_public = self.peer_node_id.as_ref().expect("peer_node_id is filled in ReceivePublicKey; ReceivePrivateKeySignature follows ReceivePublicKey; qed");
-        // [ECR] instantiation cost
-        let pk = ethkey::Public::from_slice(&peer_public[..]).map_err(|_|io::Error::new(io::ErrorKind::Other, "Invalid public key"))?;
+				// [ECR] instantiation cost
+				let pk = ethkey::Public::from_slice(&peer_public[..]).map_err(|_|io::Error::new(io::ErrorKind::Other, "Invalid public key"))?;
 				if !verify_public(&pk, &*message.confirmation_signed, &self.self_confirmation_plain).unwrap_or(false) {
 					return Ok((stream, Err(Error::InvalidMessage)).into());
 				}

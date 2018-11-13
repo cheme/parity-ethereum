@@ -656,9 +656,9 @@ impl<T> SessionImpl<T> where T: SessionTransport {
 				session_nonce: core.nonce,
 				threshold: old_key_share.threshold,
 				author: old_key_share.author.clone().into(),
-				joint_public: old_key_share.public.as_ref().into(),
-				common_point: old_key_share.common_point.clone().map(|p|p.as_ref().into()),
-				encrypted_point: old_key_share.encrypted_point.clone().map(|p|p.as_ref().into()),
+				joint_public: old_key_share.public.clone().into(),
+				common_point: old_key_share.common_point.clone().map(Into::into),
+				encrypted_point: old_key_share.encrypted_point.clone().map(Into::into),
 				id_numbers: old_key_version.id_numbers.iter()
 					.filter(|&(k, _)| version_holders.contains(k))
 					.map(|(k, v)| (k.clone().into(), v.clone().into())).collect(),
@@ -740,9 +740,9 @@ impl<T> SessionImpl<T> where T: SessionTransport {
 			DocumentKeyShare {
 				author: new_key_share.author.clone(),
 				threshold: new_key_share.threshold,
-				public: new_key_share.joint_public.clone(),
-				common_point: new_key_share.common_point.clone(),
-				encrypted_point: new_key_share.encrypted_point.clone(),
+				public: new_key_share.joint_public.clone().into(),
+				common_point: new_key_share.common_point.clone().map(Into::into),
+				encrypted_point: new_key_share.encrypted_point.clone().map(Into::into),
 				versions: Vec::new(),
 			}
 		});

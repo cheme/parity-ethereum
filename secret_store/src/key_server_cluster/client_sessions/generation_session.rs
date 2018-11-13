@@ -108,10 +108,9 @@ struct SessionData {
 	/// Key share.
 	key_share: Option<Result<DocumentKeyShare, Error>>,
 	/// Jointly generated public key, which can be used to encrypt secret. Public.
-	joint_public_and_secret: Option<Result<(Public, Secret, Secret), Error>>,
+	joint_public_and_secret: Option<Result<(NodeId, Secret, Secret), Error>>,
 }
 
-/// Mutable node-specific data.
 #[derive(Debug, Clone)]
 struct NodeData {
 	/// Random unique scalar. Persistent.
@@ -126,8 +125,10 @@ struct NodeData {
 	pub publics: Option<Vec<Public>>,
 
 	// === Values, filled during KG phase ===
+	// [ECR] this should use `Publ
+	// Mutable node-specific data.
 	/// Public share, which has been received from this node.
-	pub public_share: Option<Public>,
+	pub public_share: Option<NodeId>,
 
 	// === Values, filled during completion phase ===
 	/// Flags marking that node has confirmed session completion (generated key is stored).
@@ -260,13 +261,13 @@ impl SessionImpl {
 	}
 
 	/// Wait for session completion.
-	pub fn wait(&self, timeout: Option<Duration>) -> Option<Result<Public, Error>> {
+	pub fn wait(&self, timeout: Option<Duration>) -> Option<Result<NodeId, Error>> {
 		Self::wait_session(&self.completed, &self.data, timeout, |data| data.joint_public_and_secret.clone()
 			.map(|r| r.map(|r| r.0.clone())))
 	}
 
 	/// Get generated public and secret (if any).
-	pub fn joint_public_and_secret(&self) -> Option<Result<(Public, Secret, Secret), Error>> {
+	pub fn joint_public_and_secret(&self) -> Option<Result<(NodeId, Secret, Secret), Error>> {
 		self.data.lock().joint_public_and_secret.clone()
 	}
 
@@ -538,7 +539,10 @@ impl SessionImpl {
 				return Err(Error::InvalidMessage);
 			}
 
-			node_data.public_share = Some(Public::from_slice(&message.public_share[..])?);
+
+			// [ECR] could not use Public here due to some default public (invalid) being use
+			//node_data.public_share = Some(Public::from_slice(&message.public_share[..])?);
+			node_data.public_share = Some(message.public_share.clone().into());
 		}
 
 		// if there's also nodes, which has not sent us their public shares - do nothing
@@ -575,10 +579,14 @@ impl SessionImpl {
 
 			// calculate joint public key
 			let is_zero = data.is_zero.expect("is_zero is filled in initialization phase; KG phase follows initialization phase; qed");
-			let joint_public = if !is_zero {
-				let public_shares = data.nodes.values()
-					.map(|n| n.public_share.as_ref().expect("keys received on KD phase; KG phase follows KD phase; qed"));
-				math::compute_joint_public(public_shares)?
+			let joint_public: NodeId = if !is_zero {
+				let public_shares: Vec<_> = data.nodes.values()
+					.map(|n| n.public_share.as_ref().expect("keys received on KD phase; KG phase follows KD phase; qed"))
+					.map(|n| Public::from_slice(&n[..]))
+					.filter(|n| n.is_ok())
+					.map(|n| n.expect("filter before; qed"))
+					.collect();
+				math::compute_joint_public(public_shares.iter())?.into()
 			} else {
 				Default::default()
 			};
@@ -637,7 +645,7 @@ impl SessionImpl {
 
 		// remember derived point
 		let mut data = self.data.lock();
-    let dp_id: NodeId = derived_point.as_ref().into();
+		let dp_id: NodeId = derived_point.as_ref().into();
 		data.derived_point = Some(derived_point);
 
 		// broadcast derived point && other session paraeters to every other node
@@ -706,7 +714,7 @@ impl SessionImpl {
 		// key verification (KV) phase: check that other nodes have passed correct secrets
 		let threshold = data.threshold.expect("threshold is filled in initialization phase; KV phase follows initialization phase; qed");
 		let is_zero = data.is_zero.expect("is_zero is filled in initialization phase; KV phase follows initialization phase; qed");
-		let self_public_share = {
+		let self_public_share: NodeId = {
 			if !is_zero {
 				let derived_point = data.derived_point.clone().expect("derived point generated on initialization phase; KV phase follows initialization phase; qed");
 				let number_id = data.nodes[self.node()].id_number.clone();
@@ -729,7 +737,7 @@ impl SessionImpl {
 					math::compute_public_share(self_secret_coeff)?
 				};
 
-				self_public_share
+				self_public_share.as_ref().into()
 			} else {
 				// TODO [Trust]: add verification when available
 				Default::default()
@@ -753,7 +761,7 @@ impl SessionImpl {
 		self.cluster.broadcast(Message::Generation(GenerationMessage::PublicKeyShare(PublicKeyShare {
 			session: self.id.clone().into(),
 			session_nonce: self.nonce,
-			public_share: self_public_share.as_ref().into(),
+			public_share: self_public_share.into(),
 		})))
 	}
 
@@ -763,9 +771,14 @@ impl SessionImpl {
 
 		// calculate joint public key
 		let is_zero = data.is_zero.expect("is_zero is filled in initialization phase; KG phase follows initialization phase; qed");
-		let joint_public = if !is_zero {
-			let public_shares = data.nodes.values().map(|n| n.public_share.as_ref().expect("keys received on KD phase; KG phase follows KD phase; qed"));
-			math::compute_joint_public(public_shares)?
+		let joint_public: NodeId = if !is_zero {
+			let public_shares: Vec<_> = data.nodes.values().map(|n| n.public_share.as_ref().expect("keys received on KD phase; KG phase follows KD phase; qed"))
+					.map(|n| Public::from_slice(&n[..]))
+					.filter(|n| n.is_ok())
+					.map(|n| n.expect("filter before; qed"))
+					.collect();
+
+			math::compute_joint_public(public_shares.iter())?.into()
 		} else {
 			Default::default()
 		};
@@ -949,7 +962,7 @@ pub mod tests {
 	use std::collections::{BTreeSet, BTreeMap, VecDeque};
 	use std::time::Duration;
 	use ethereum_types::Address;
-	use ethkey::{Random, Generator, KeyPair};
+	use ethkey::{Random, Generator, KeyPair, Public};
 	use key_server_cluster::{NodeId, SessionId, Error, KeyStorage, DummyKeyStorage};
 	use key_server_cluster::message::{self, Message, GenerationMessage};
 	use key_server_cluster::cluster::tests::{DummyCluster, make_clusters, run_clusters, loop_until,
@@ -1339,14 +1352,14 @@ pub mod tests {
 			for node in l.nodes.values() {
 				let state = node.session.state();
 				assert_eq!(state, SessionState::Finished);
-				assert_eq!(node.session.joint_public_and_secret().map(|p| p.map(|p| p.0)), Some(Ok(joint_public_key.clone())));
+				assert_eq!(node.session.joint_public_and_secret().map(|p| p.map(|p| p.0)), Some(Ok(joint_public_key)));
 			}
 
 			// now let's encrypt some secret (which is a point on EC)
 			let document_secret_plain = Random.generate().unwrap().public().clone();
 			let all_nodes_id_numbers: Vec<_> = l.master().data.lock().nodes.values().map(|n| n.id_number.clone()).collect();
 			let all_nodes_secret_shares: Vec<_> = l.nodes.values().map(|n| n.session.data.lock().secret_share.as_ref().unwrap().clone()).collect();
-			let document_secret_decrypted = do_encryption_and_decryption(threshold, &joint_public_key,
+			let document_secret_decrypted = do_encryption_and_decryption(threshold, &Public::from_slice(&joint_public_key[..]).unwrap(),
 				&all_nodes_id_numbers,
 				&all_nodes_secret_shares,
 				None,

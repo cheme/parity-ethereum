@@ -20,7 +20,6 @@ use std::time;
 use std::sync::Arc;
 use parking_lot::{Condvar, Mutex};
 use ethereum_types::Address;
-use ethkey::Public;
 use key_server_cluster::{Error, NodeId, SessionId, Requester, KeyStorage,
 	DocumentKeyShare, ServerKeyId};
 use key_server_cluster::cluster::Cluster;
@@ -139,7 +138,7 @@ impl SessionImpl {
 	}
 
 	/// Start new session initialization. This must be called on master node.
-	pub fn initialize(&self, requester: Requester, common_point: Public, encrypted_point: Public) -> Result<(), Error> {
+	pub fn initialize(&self, requester: Requester, common_point: NodeId, encrypted_point: NodeId) -> Result<(), Error> {
 		let mut data = self.data.lock();
 
 		// check state
@@ -169,8 +168,8 @@ impl SessionImpl {
 				session: self.id.clone().into(),
 				session_nonce: self.nonce,
 				requester: requester.into(),
-				common_point: common_point.as_ref().into(),
-				encrypted_point: encrypted_point.as_ref().into(),
+				common_point: common_point.into(),
+				encrypted_point: encrypted_point.into(),
 			})))
 		} else {
 			data.state = SessionState::Finished;
@@ -198,7 +197,7 @@ impl SessionImpl {
 			let requester: Requester = message.requester.clone().into();
 			let requester_address = requester.address(&self.id).map_err(Error::InsufficientRequesterData)?;
 			update_encrypted_data(&self.key_storage, self.id.clone(),
-				encrypted_data, requester_address, Public::from_slice(&message.common_point[..])?, Public::from_slice(&message.encrypted_point[..])?)?;
+				encrypted_data, requester_address, message.common_point.clone().into(), message.encrypted_point.clone().into())?;
 		}
 
 		// update state
@@ -334,7 +333,7 @@ pub fn check_encrypted_data(key_share: Option<&DocumentKeyShare>) -> Result<(), 
 }
 
 /// Update key share with encrypted document key.
-pub fn update_encrypted_data(key_storage: &Arc<KeyStorage>, key_id: ServerKeyId, mut key_share: DocumentKeyShare, author: Address, common_point: Public, encrypted_point: Public) -> Result<(), Error> {
+pub fn update_encrypted_data(key_storage: &Arc<KeyStorage>, key_id: ServerKeyId, mut key_share: DocumentKeyShare, author: Address, common_point: NodeId, encrypted_point: NodeId) -> Result<(), Error> {
 	// author must be the same
 	if key_share.author != author {
 		return Err(Error::AccessDenied);

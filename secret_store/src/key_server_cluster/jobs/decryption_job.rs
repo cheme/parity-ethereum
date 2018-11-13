@@ -30,7 +30,7 @@ pub struct DecryptionJob {
 	/// Access key.
 	access_key: Secret,
 	/// Requester public key.
-	requester: Public,
+	requester: NodeId,
 	/// Key share.
 	key_share: DocumentKeyShare,
 	/// Key version.
@@ -68,7 +68,7 @@ pub struct PartialDecryptionResponse {
 }
 
 impl DecryptionJob {
-	pub fn new_on_slave(self_node_id: NodeId, access_key: Secret, requester: Public, key_share: DocumentKeyShare, key_version: H256) -> Result<Self, Error> {
+	pub fn new_on_slave(self_node_id: NodeId, access_key: Secret, requester: NodeId, key_share: DocumentKeyShare, key_version: H256) -> Result<Self, Error> {
 		debug_assert!(key_share.common_point.is_some() && key_share.encrypted_point.is_some());
 		Ok(DecryptionJob {
 			self_node_id: self_node_id,
@@ -82,7 +82,7 @@ impl DecryptionJob {
 		})
 	}
 
-	pub fn new_on_master(self_node_id: NodeId, access_key: Secret, requester: Public, key_share: DocumentKeyShare, key_version: H256, is_shadow_decryption: bool, is_broadcast_session: bool) -> Result<Self, Error> {
+	pub fn new_on_master(self_node_id: NodeId, access_key: Secret, requester: NodeId, key_share: DocumentKeyShare, key_version: H256, is_shadow_decryption: bool, is_broadcast_session: bool) -> Result<Self, Error> {
 		debug_assert!(key_share.common_point.is_some() && key_share.encrypted_point.is_some());
 		Ok(DecryptionJob {
 			self_node_id: self_node_id,
@@ -143,14 +143,14 @@ impl JobExecutor for DecryptionJob {
 		let node_shadow = math::compute_node_shadow(&key_version.secret_share, &self_id_number, other_id_numbers)?;
 		let decrypt_shadow = if partial_request.is_shadow_decryption { Some(math::generate_random_scalar()?) } else { None };
 		let common_point = self.key_share.common_point.as_ref().expect("DecryptionJob is only created when common_point is known; qed");
-		let (shadow_point, decrypt_shadow) = math::compute_node_shadow_point(&self.access_key, &common_point, &node_shadow, decrypt_shadow)?;
+		let (shadow_point, decrypt_shadow) = math::compute_node_shadow_point(&self.access_key, &Public::from_slice(&common_point[..])?, &node_shadow, decrypt_shadow)?;
 
 		Ok(JobPartialRequestAction::Respond(PartialDecryptionResponse {
 			request_id: partial_request.id,
 			shadow_point: shadow_point,
 			decrypt_shadow: match decrypt_shadow.clone() {
 				None => None,
-				Some(decrypt_shadow) => Some(encrypt(&self.requester, &DEFAULT_MAC, decrypt_shadow.as_ref())?),
+				Some(decrypt_shadow) => Some(encrypt(&Public::from_slice(&self.requester[..])?, &DEFAULT_MAC, decrypt_shadow.as_ref())?),
 			},
 		}))
 	}
@@ -171,11 +171,11 @@ impl JobExecutor for DecryptionJob {
 		let common_point = self.key_share.common_point.as_ref().expect("DecryptionJob is only created when common_point is known; qed");
 		let encrypted_point = self.key_share.encrypted_point.as_ref().expect("DecryptionJob is only created when encrypted_point is known; qed");
 		let joint_shadow_point = math::compute_joint_shadow_point(partial_responses.values().map(|s| &s.shadow_point))?;
-		let decrypted_secret = math::decrypt_with_joint_shadow(self.key_share.threshold, &self.access_key, encrypted_point, &joint_shadow_point)?;
+		let decrypted_secret = math::decrypt_with_joint_shadow(self.key_share.threshold, &self.access_key, &Public::from_slice(&encrypted_point[..])?, &joint_shadow_point)?;
 		Ok(EncryptedDocumentKeyShadow {
 			decrypted_secret: decrypted_secret,
 			common_point: if is_shadow_decryption {
-				Some(math::make_common_shadow_point(self.key_share.threshold, common_point.clone())?)
+				Some(Public::from_slice(&math::make_common_shadow_point(self.key_share.threshold, common_point.clone())?[..])?)
 			} else { None },
 			decrypt_shadows: if is_shadow_decryption {
 				Some(partial_responses.values().map(|r| r.decrypt_shadow.as_ref()

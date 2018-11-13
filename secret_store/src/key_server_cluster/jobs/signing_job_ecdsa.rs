@@ -30,7 +30,7 @@ pub struct EcdsaSigningJob {
 	/// Share of inv(nonce).
 	inv_nonce_share: Secret,
 	/// Nonce public.
-	nonce_public: Public,
+	nonce_public: NodeId,
 	/// Request id.
 	request_id: Option<Secret>,
 	/// 
@@ -59,7 +59,7 @@ pub struct EcdsaPartialSigningResponse {
 }
 
 impl EcdsaSigningJob {
-	pub fn new_on_slave(key_share: DocumentKeyShare, key_version: H256, nonce_public: Public, inv_nonce_share: Secret) -> Result<Self, Error> {
+	pub fn new_on_slave(key_share: DocumentKeyShare, key_version: H256, nonce_public: NodeId, inv_nonce_share: Secret) -> Result<Self, Error> {
 		Ok(EcdsaSigningJob {
 			key_share: key_share,
 			key_version: key_version,
@@ -71,7 +71,7 @@ impl EcdsaSigningJob {
 		})
 	}
 
-	pub fn new_on_master(key_share: DocumentKeyShare, key_version: H256, nonce_public: Public, inv_nonce_share: Secret, inversed_nonce_coeff: Secret, message_hash: H256) -> Result<Self, Error> {
+	pub fn new_on_master(key_share: DocumentKeyShare, key_version: H256, nonce_public: NodeId, inv_nonce_share: Secret, inversed_nonce_coeff: Secret, message_hash: H256) -> Result<Self, Error> {
 		Ok(EcdsaSigningJob {
 			key_share: key_share,
 			key_version: key_version,
@@ -109,7 +109,7 @@ impl JobExecutor for EcdsaSigningJob {
 	fn process_partial_request(&mut self, partial_request: EcdsaPartialSigningRequest) -> Result<JobPartialRequestAction<EcdsaPartialSigningResponse>, Error> {
 		let inversed_nonce_coeff_mul_nonce = math::compute_secret_mul(&partial_request.inversed_nonce_coeff, &self.inv_nonce_share)?;
 		let key_version = self.key_share.version(&self.key_version)?;
-		let signature_r = math::compute_ecdsa_r(&self.nonce_public)?;
+		let signature_r = math::compute_ecdsa_r(&Public::from_slice(&self.nonce_public[..])?)?;
 		let inv_nonce_mul_secret = math::compute_secret_mul(&inversed_nonce_coeff_mul_nonce, &key_version.secret_share)?;
 		let partial_signature_s = math::compute_ecdsa_s_share(
 			&inversed_nonce_coeff_mul_nonce,
@@ -142,9 +142,10 @@ impl JobExecutor for EcdsaSigningJob {
 		let id_numbers: Vec<_> = partial_responses.keys().map(|n| key_version.id_numbers[n].clone()).collect();
 		let signature_s_shares: Vec<_> = partial_responses.values().map(|r| r.partial_signature_s.clone()).collect();
 		let signature_s = math::compute_ecdsa_s(self.key_share.threshold, &signature_s_shares, &id_numbers)?;
-		let signature_r = math::compute_ecdsa_r(&self.nonce_public)?;
+		let pk = Public::from_slice(&self.nonce_public[..])?;
+		let signature_r = math::compute_ecdsa_r(&pk)?;
 
-		let signature = math::serialize_ecdsa_signature(&self.nonce_public, signature_r, signature_s);
+		let signature = math::serialize_ecdsa_signature(&pk, signature_r, signature_s);
 
 		Ok(signature)
 	}

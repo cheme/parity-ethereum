@@ -31,20 +31,11 @@ pub struct Secret {
 
 // Note that equal and ord implementation is less efficient than previous FixedHash one (libc
 // call).
-#[derive(Clone, PartialEq, Eq, Debug)]
+/// Deriving `Default` secret-store compatibility, does not make a lot of sense.
+/// TODO refacto secret store usage of default public to null NodeID
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct Public {
 	inner: <Secp256k1 as Asym>::PublicKey,
-}
-
-lazy_static! {
-	static ref DEFAULT_PUB : Public = Public::from_pub(Secp256k1::public_from_secret(&Secp256k1::zero_key()).expect("only one value"));
-}
-
-/// secret-store compatibility, does not make a lot of sense.
-impl Default for Public {
-	fn default() -> Public {
-		DEFAULT_PUB.clone()
-	}
 }
 
 impl DerefMut for Public {

@@ -143,8 +143,8 @@ impl Requester {
 	}
 
 	pub fn address(&self, server_key_id: &ServerKeyId) -> Result<ethkey::Address, String> {
-		self.public(server_key_id)
-			.map(|p| ethkey::public_to_address(&p))
+		self.node_id(server_key_id)
+			.map(|p| ethkey::array_to_address(&p[..]))
 	}
 }
 

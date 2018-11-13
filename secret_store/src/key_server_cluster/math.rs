@@ -16,6 +16,7 @@
 
 use ethkey::{Public, Secret, Signature, Random, Generator, math};
 use ethereum_types::{H256, U256};
+use types::NodeId;
 use hash::keccak;
 use key_server_cluster::Error;
 use crypto::clear_on_drop::clear::Clear;
@@ -332,12 +333,13 @@ pub fn decrypt_with_joint_shadow(threshold: usize, access_key: &Secret, encrypte
 }
 
 /// Prepare common point for shadow decryption.
-pub fn make_common_shadow_point(threshold: usize, mut common_point: Public) -> Result<Public, Error> {
+pub fn make_common_shadow_point(threshold: usize, common_point: NodeId) -> Result<NodeId, Error> {
 	if threshold % 2 != 1 {
 		Ok(common_point)
 	} else {
+		let mut common_point = Public::from_slice(&common_point[..])?;
 		math::public_negate(&mut common_point)?;
-		Ok(common_point)
+		Ok(common_point.into())
 	}
 }
 
@@ -363,11 +365,11 @@ pub fn decrypt_with_joint_secret(encrypted_point: &Public, common_point: &Public
 }
 
 /// Combine message hash with public key X coordinate.
-pub fn combine_message_hash_with_public(message_hash: &H256, public: &Public) -> Result<Secret, Error> {
+pub fn combine_message_hash_with_public(message_hash: &H256, public: &[u8]) -> Result<Secret, Error> {
 	// buffer is just [message_hash | public.x]
 	let mut buffer = [0; 64];
 	buffer[0..32].copy_from_slice(&message_hash[0..32]);
-	buffer[32..64].copy_from_slice(&public.as_ref()[0..32]);
+	buffer[32..64].copy_from_slice(&public[0..32]);
 
 	// calculate hash of buffer
 	let hash = keccak(&buffer[..]);
@@ -421,7 +423,7 @@ pub fn local_compute_schnorr_signature(nonce: &Secret, secret: &Secret, message_
 	let mut nonce_public = math::generation_point();
 	math::public_mul_secret(&mut nonce_public, &nonce).unwrap();
 
-	let combined_hash = combine_message_hash_with_public(message_hash, &nonce_public)?;
+	let combined_hash = combine_message_hash_with_public(message_hash, nonce_public.as_ref())?;
 
 	let mut sig_subtrahend = combined_hash.clone();
 	sig_subtrahend.mul(secret)?;
@@ -440,7 +442,7 @@ pub fn verify_schnorr_signature(public: &Public, signature: &(Secret, Secret), m
 	math::public_mul_secret(&mut nonce_public, &signature.0)?;
 	math::public_add(&mut nonce_public, &addendum)?;
 
-	let combined_hash = combine_message_hash_with_public(message_hash, &nonce_public)?;
+	let combined_hash = combine_message_hash_with_public(message_hash, nonce_public.as_ref())?;
 	Ok(combined_hash == signature.0)
 }
 
@@ -476,8 +478,8 @@ pub fn compute_ecdsa_s(t: usize, signature_s_shares: &[Secret], id_numbers: &[Se
 
 /// Serialize ECDSA signature to [r][s]v form. TODO is it standard, get a fn.
 pub fn serialize_ecdsa_signature(nonce_public: &Public, signature_r: Secret, signature_s: Secret) -> Signature {
-  let mut signature_r = H256::from(signature_r.as_ref());
-  let mut signature_s = H256::from(signature_s.as_ref());
+	let mut signature_r = H256::from(signature_r.as_ref());
+	let mut signature_s = H256::from(signature_s.as_ref());
 	// compute recovery param
 	let mut signature_v = {
 		let nonce_public_x = public_x(nonce_public);
@@ -491,7 +493,7 @@ pub fn serialize_ecdsa_signature(nonce_public: &Public, signature_r: Secret, sig
 	// fix high S
 	let curve_order = math::curve_order();
 	let curve_order_half = curve_order / 2;
-  // TODO put those U256 calc in crypto crate
+	// TODO put those U256 calc in crypto crate
 	let s_numeric: U256 = signature_s.into();
 	if s_numeric > curve_order_half {
 		let signature_s_hash: H256 = (curve_order - s_numeric).into();
@@ -503,8 +505,8 @@ pub fn serialize_ecdsa_signature(nonce_public: &Public, signature_r: Secret, sig
 	let mut signature = [0u8; 65];
 	signature[..32].copy_from_slice(&signature_r);
 	signature[32..64].copy_from_slice(&signature_s);
-  Clear::clear(&mut signature_r);
-  Clear::clear(&mut signature_s);
+	Clear::clear(&mut signature_r);
+	Clear::clear(&mut signature_s);
 	signature[64] = signature_v;
 
 	signature.into()
@@ -839,7 +841,7 @@ pub mod tests {
 			let one_time_artifacts = run_key_generation(t, n, Some(id_numbers), None);
 
 			// step 2: message hash && x coordinate of one-time public value are combined
-			let combined_hash = combine_message_hash_with_public(&message_hash, &one_time_artifacts.joint_public).unwrap();
+			let combined_hash = combine_message_hash_with_public(&message_hash, one_time_artifacts.joint_public.as_ref()).unwrap();
 
 			// step 3: compute signature shares
 			let partial_signatures: Vec<_> = (0..n)

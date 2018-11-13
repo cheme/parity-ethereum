@@ -17,9 +17,9 @@
 use std::sync::Arc;
 use bytes::Bytes;
 use ethereum_types::Address;
-use ethkey::Public;
 use listener::service_contract::ServiceContract;
 use listener::service_contract_listener::ServiceTask;
+use types::NodeId;
 use {ServerKeyId};
 
 /// Aggregated on-chain service contract.
@@ -62,7 +62,7 @@ impl ServiceContract for OnChainServiceContractAggregate {
 	// in current implementation all publish methods are independent of actual contract adddress
 	// (tx is sent to origin) => we do not care which contract to use for publish data in methods below
 
-	fn publish_generated_server_key(&self, origin: &Address, server_key_id: &ServerKeyId, server_key: Public) -> Result<(), String> {
+	fn publish_generated_server_key(&self, origin: &Address, server_key_id: &ServerKeyId, server_key: NodeId) -> Result<(), String> {
 		self.contracts[0].publish_generated_server_key(origin, server_key_id, server_key)
 	}
 
@@ -70,7 +70,7 @@ impl ServiceContract for OnChainServiceContractAggregate {
 		self.contracts[0].publish_server_key_generation_error(origin, server_key_id)
 	}
 
-	fn publish_retrieved_server_key(&self, origin: &Address, server_key_id: &ServerKeyId, server_key: Public, threshold: usize) -> Result<(), String> {
+	fn publish_retrieved_server_key(&self, origin: &Address, server_key_id: &ServerKeyId, server_key: NodeId, threshold: usize) -> Result<(), String> {
 		self.contracts[0].publish_retrieved_server_key(origin, server_key_id, server_key, threshold)
 	}
 
@@ -86,11 +86,11 @@ impl ServiceContract for OnChainServiceContractAggregate {
 		self.contracts[0].publish_document_key_store_error(origin, server_key_id)
 	}
 
-	fn publish_retrieved_document_key_common(&self, origin: &Address, server_key_id: &ServerKeyId, requester: &Address, common_point: Public, threshold: usize) -> Result<(), String> {
+	fn publish_retrieved_document_key_common(&self, origin: &Address, server_key_id: &ServerKeyId, requester: &Address, common_point: NodeId, threshold: usize) -> Result<(), String> {
 		self.contracts[0].publish_retrieved_document_key_common(origin, server_key_id, requester, common_point, threshold)
 	}
 
-	fn publish_retrieved_document_key_personal(&self, origin: &Address, server_key_id: &ServerKeyId, requester: &Address, participants: &[Address], decrypted_secret: Public, shadow: Bytes) -> Result<(), String> {
+	fn publish_retrieved_document_key_personal(&self, origin: &Address, server_key_id: &ServerKeyId, requester: &Address, participants: &[Address], decrypted_secret: NodeId, shadow: Bytes) -> Result<(), String> {
 		self.contracts[0].publish_retrieved_document_key_personal(origin, server_key_id, requester, participants, decrypted_secret, shadow)
 	}
 

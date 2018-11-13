@@ -80,11 +80,12 @@ impl ServerKeyGenerator for KeyServerImpl {
 		generation_session.wait(None)
 			.expect("when wait is called without timeout it always returns Some; qed")
 			.map_err(Into::into)
+			.and_then(|p|Ok(Public::from_slice(&p[..])?))
 	}
 }
 
 impl DocumentKeyServer for KeyServerImpl {
-	fn store_document_key(&self, key_id: &ServerKeyId, author: &Requester, common_point: Public, encrypted_document_key: Public) -> Result<(), Error> {
+	fn store_document_key(&self, key_id: &ServerKeyId, author: &Requester, common_point: NodeId, encrypted_document_key: NodeId) -> Result<(), Error> {
 		// store encrypted key
 		let encryption_session = self.data.lock().cluster.new_encryption_session(key_id.clone(),
 			author.clone(), common_point, encrypted_document_key)?;
@@ -103,7 +104,7 @@ impl DocumentKeyServer for KeyServerImpl {
 		let encrypted_document_key = math::encrypt_secret(&document_key, &server_key)?;
 
 		// store document key in the storage
-		self.store_document_key(key_id, author, encrypted_document_key.common_point, encrypted_document_key.encrypted_point)?;
+		self.store_document_key(key_id, author, encrypted_document_key.common_point.into(), encrypted_document_key.encrypted_point.into())?;
 
 		// encrypt document key with requestor public key
 		let document_key = crypto::ecies::encrypt(&public, &DEFAULT_MAC, document_key.as_ref())
@@ -267,7 +268,7 @@ pub mod tests {
 	}
 
 	impl DocumentKeyServer for DummyKeyServer {
-		fn store_document_key(&self, _key_id: &ServerKeyId, _author: &Requester, _common_point: Public, _encrypted_document_key: Public) -> Result<(), Error> {
+		fn store_document_key(&self, _key_id: &ServerKeyId, _author: &Requester, _common_point: NodeId, _encrypted_document_key: NodeId) -> Result<(), Error> {
 			unimplemented!("test-only")
 		}
 
@@ -420,7 +421,7 @@ pub mod tests {
 
 			// store document key
 			key_servers[0].store_document_key(&server_key_id, &signature.clone().into(),
-				encrypted_document_key.common_point, encrypted_document_key.encrypted_point).unwrap();
+				encrypted_document_key.common_point.into(), encrypted_document_key.encrypted_point.into()).unwrap();
 
 			// now let's try to retrieve key back
 			for key_server in key_servers.iter() {

@@ -441,7 +441,7 @@ impl SessionImpl {
 		let key_version = key_share.version(data.version.as_ref().ok_or(Error::InvalidMessage)?)?.hash.clone();
 		let requester_public = data.consensus_session.consensus_job().executor().requester()
 			.ok_or(Error::InvalidStateForRequest)?
-			.public(&self.core.meta.id)
+			.node_id(&self.core.meta.id)
 			.map_err(Error::InsufficientRequesterData)?;
 		let decryption_job = DecryptionJob::new_on_slave(self.core.meta.self_node_id.clone(), self.core.access_key.clone(),
 			requester_public.clone(), key_share.clone(), key_version)?;
@@ -608,7 +608,7 @@ impl SessionImpl {
 
 		let key_version = key_share.version(version)?.hash.clone();
 		let requester = data.consensus_session.consensus_job().executor().requester().ok_or(Error::InvalidStateForRequest)?.clone();
-		let requester_public = requester.public(&core.meta.id).map_err(Error::InsufficientRequesterData)?;
+		let requester_public = requester.node_id(&core.meta.id).map_err(Error::InsufficientRequesterData)?;
 		let consensus_group = data.consensus_session.select_consensus_group()?.clone();
 		let decryption_job = DecryptionJob::new_on_master(core.meta.self_node_id.clone(),
 			core.access_key.clone(), requester_public.clone(), key_share.clone(), key_version,
@@ -845,7 +845,7 @@ mod tests {
 	use std::sync::Arc;
 	use std::collections::{BTreeMap, VecDeque};
 	use acl_storage::DummyAclStorage;
-	use ethkey::{self, KeyPair, Random, Generator, Public, Secret, public_to_address};
+	use ethkey::{self, KeyPair, Random, Generator, Secret, public_to_address};
 	use key_server_cluster::{NodeId, DocumentKeyShare, DocumentKeyShareVersion, SessionId, Requester,
 		Error, EncryptedDocumentKeyShadow, SessionMeta};
 	use key_server_cluster::cluster::tests::DummyCluster;
@@ -880,14 +880,14 @@ mod tests {
 			("321977760d1d8e15b047a309e4c7fe6f355c10bb5a06c68472b676926427f69f229024fa2692c10da167d14cdc77eb95d0fce68af0a0f704f0d3db36baa83bb2".into(),
 				"12cf422d50002d04e52bd4906fd7f5f235f051ca36abfe37e061f8da248008d8".parse().unwrap()),
 		];
-		let common_point: Public = "6962be696e1bcbba8e64cc7fddf140f854835354b5804f3bb95ae5a2799130371b589a131bd39699ac7174ccb35fc4342dab05331202209582fc8f3a40916ab0".into();
-		let encrypted_point: Public = "b07031982bde9890e12eff154765f03c56c3ab646ad47431db5dd2d742a9297679c4c65b998557f8008469afd0c43d40b6c5f6c6a1c7354875da4115237ed87a".into();
+		let common_point: NodeId = "6962be696e1bcbba8e64cc7fddf140f854835354b5804f3bb95ae5a2799130371b589a131bd39699ac7174ccb35fc4342dab05331202209582fc8f3a40916ab0".into();
+		let encrypted_point: NodeId = "b07031982bde9890e12eff154765f03c56c3ab646ad47431db5dd2d742a9297679c4c65b998557f8008469afd0c43d40b6c5f6c6a1c7354875da4115237ed87a".into();
 		let encrypted_datas: Vec<_> = (0..5).map(|i| DocumentKeyShare {
 			author: Default::default(),
 			threshold: 3,
 			public: Default::default(),
-			common_point: Some(common_point.clone()),
-			encrypted_point: Some(encrypted_point.clone()),
+			common_point: Some(common_point),
+			encrypted_point: Some(encrypted_point),
 			versions: vec![DocumentKeyShareVersion {
 				hash: Default::default(),
 				id_numbers: id_numbers.clone().into_iter().collect(),
@@ -983,8 +983,8 @@ mod tests {
 				author: Default::default(),
 				threshold: 0,
 				public: Default::default(),
-				common_point: Some(Random.generate().unwrap().public().clone()),
-				encrypted_point: Some(Random.generate().unwrap().public().clone()),
+				common_point: Some(Random.generate().unwrap().public().as_ref().into()),
+				encrypted_point: Some(Random.generate().unwrap().public().as_ref().into()),
 				versions: vec![DocumentKeyShareVersion {
 					hash: Default::default(),
 					id_numbers: nodes,
@@ -1041,8 +1041,8 @@ mod tests {
 				author: Default::default(),
 				threshold: 2,
 				public: Default::default(),
-				common_point: Some(Random.generate().unwrap().public().clone()),
-				encrypted_point: Some(Random.generate().unwrap().public().clone()),
+				common_point: Some(Random.generate().unwrap().public().as_ref().into()),
+				encrypted_point: Some(Random.generate().unwrap().public().as_ref().into()),
 				versions: vec![DocumentKeyShareVersion {
 					hash: Default::default(),
 					id_numbers: nodes,

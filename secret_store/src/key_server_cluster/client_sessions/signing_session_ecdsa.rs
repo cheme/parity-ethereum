@@ -18,7 +18,7 @@ use std::collections::{BTreeSet, BTreeMap};
 use std::collections::btree_map::Entry;
 use std::sync::Arc;
 use parking_lot::{Mutex, Condvar};
-use ethkey::{Public, Secret, Signature, sign};
+use ethkey::{Secret, Signature, sign};
 use ethereum_types::H256;
 use key_server_cluster::{Error, NodeId, SessionId, SessionMeta, AclStorage, DocumentKeyShare, Requester};
 use key_server_cluster::cluster::{Cluster};
@@ -296,7 +296,6 @@ impl SessionImpl {
 		if self.core.nonce != message.session_nonce() {
 			return Err(Error::ReplayProtection);
 		}
-
 		match message {
 			&EcdsaSigningMessage::EcdsaSigningConsensusMessage(ref message) =>
 				self.on_consensus_message(sender, message),
@@ -990,7 +989,7 @@ impl SessionCore {
 		}
 	}
 
-	pub fn disseminate_jobs(&self, consensus_session: &mut SigningConsensusSession, version: &H256, nonce_public: Public, inv_nonce_share: Secret, inversed_nonce_coeff: Secret, message_hash: H256) -> Result<(), Error> {
+	pub fn disseminate_jobs(&self, consensus_session: &mut SigningConsensusSession, version: &H256, nonce_public: NodeId, inv_nonce_share: Secret, inversed_nonce_coeff: Secret, message_hash: H256) -> Result<(), Error> {
 		let key_share = match self.key_share.as_ref() {
 			None => return Err(Error::InvalidMessage),
 			Some(key_share) => key_share,

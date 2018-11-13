@@ -42,11 +42,15 @@ pub struct DocumentKeyShare {
 	/// Decryption threshold (at least threshold + 1 nodes are required to decrypt data).
 	pub threshold: usize,
 	/// Server public key.
-	pub public: Public,
+	/// [ECR] this can be null value leading to test error
+	/// TODO should be Public?
+	pub public: NodeId,
+	/// [ECR] we need to accept storing invalid point due to tests
 	/// Common (shared) encryption point.
-	pub common_point: Option<Public>,
+	pub common_point: Option<NodeId>,
+	/// [ECR] we need to accept storing invalid point due to tests
 	/// Encrypted point.
-	pub encrypted_point: Option<Public>,
+	pub encrypted_point: Option<NodeId>,
 	/// Key share versions.
 	pub versions: Vec<DocumentKeyShareVersion>,
 }
@@ -277,7 +281,7 @@ impl KeyStorage for PersistentKeyStorage {
 				None => Ok(None),
 				Some(key) => serde_json::from_slice::<CurrentSerializableDocumentKeyShare>(&key)
 					.map_err(|e| Error::Database(e.to_string()))
-					.and_then(|ser|Ok(ser.into_document()?))
+					.map(Into::into)
 					.map(Some),
 			})
 	}
@@ -316,9 +320,8 @@ impl<'a> Iterator for PersistentKeyStorageIterator<'a> {
 	fn next(&mut self) -> Option<(ServerKeyId, DocumentKeyShare)> {
 		self.iter.as_mut().next()
 			.and_then(|(db_key, db_val)| serde_json::from_slice::<CurrentSerializableDocumentKeyShare>(&db_val)
-				.ok()
-				.and_then(|key| key.into_document().ok()
-				.map(|key|((*db_key).into(), key))))
+			.ok()
+			.map(|key| ((*db_key).into(), key.into())))
 	}
 }
 
@@ -370,9 +373,9 @@ impl From<DocumentKeyShare> for SerializableDocumentKeyShareV3 {
 		SerializableDocumentKeyShareV3 {
 			author: key.author.into(),
 			threshold: key.threshold,
-			public: key.public.as_ref().into(),
-			common_point: key.common_point.map(|p|p.as_ref().into()),
-			encrypted_point: key.encrypted_point.map(|p|p.as_ref().into()),
+			public: key.public.into(),
+			common_point: key.common_point.map(Into::into),
+			encrypted_point: key.encrypted_point.map(Into::into),
 			versions: key.versions.into_iter().map(Into::into).collect(),
 		}
 	}
@@ -388,33 +391,22 @@ impl From<DocumentKeyShareVersion> for SerializableDocumentKeyShareVersionV3 {
 	}
 }
 
-impl SerializableDocumentKeyShareV3 {
-	fn into_document(self) -> Result<DocumentKeyShare, Error> {
-		let common_point = if let Some(p) = self.common_point.as_ref() {
-			Some(Public::from_slice(&p[..])?)
-		} else {
-			None
-		};
-		let encrypted_point = if let Some(p) = self.encrypted_point.as_ref() {
-			Some(Public::from_slice(&p[..])?)
-		} else {
-			None
-		};
-	
-		Ok(DocumentKeyShare {
-			author: self.author.into(),
-			threshold: self.threshold,
-			public: Public::from_slice(&self.public[..])?,
-			common_point,
-			encrypted_point,
-			versions: self.versions.into_iter()
+impl From<SerializableDocumentKeyShareV3> for DocumentKeyShare {
+	fn from(key: SerializableDocumentKeyShareV3) -> Self {
+		DocumentKeyShare {
+			author: key.author.into(),
+			threshold: key.threshold,
+			public: key.public.into(),
+			common_point: key.common_point.map(Into::into),
+			encrypted_point: key.encrypted_point.map(Into::into),
+			versions: key.versions.into_iter()
 				.map(|v| DocumentKeyShareVersion {
 					hash: v.hash.into(),
 					id_numbers: v.id_numbers.into_iter().map(|(k, v)| (k.into(), v.into())).collect(),
 					secret_share: v.secret_share.into(),
 				})
 				.collect(),
-		})
+		}
 	}
 }
 
@@ -482,9 +474,9 @@ pub mod tests {
 		let value1 = DocumentKeyShare {
 			author: Default::default(),
 			threshold: 100,
-			public: Public::default(),
-			common_point: Some(Random.generate().unwrap().public().clone()),
-			encrypted_point: Some(Random.generate().unwrap().public().clone()),
+			public: Default::default(),
+			common_point: Some(Random.generate().unwrap().public().as_ref().into()),
+			encrypted_point: Some(Random.generate().unwrap().public().as_ref().into()),
 			versions: vec![DocumentKeyShareVersion {
 				hash: Default::default(),
 				id_numbers: vec![
@@ -497,9 +489,9 @@ pub mod tests {
 		let value2 = DocumentKeyShare {
 			author: Default::default(),
 			threshold: 200,
-			public: Public::default(),
-			common_point: Some(Random.generate().unwrap().public().clone()),
-			encrypted_point: Some(Random.generate().unwrap().public().clone()),
+			public: Default::default(),
+			common_point: Some(Random.generate().unwrap().public().as_ref().into()),
+			encrypted_point: Some(Random.generate().unwrap().public().as_ref().into()),
 			versions: vec![DocumentKeyShareVersion {
 				hash: Default::default(),
 				id_numbers: vec![

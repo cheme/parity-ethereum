@@ -69,7 +69,7 @@ pub trait ClusterClient: Send + Sync {
 	/// Start new generation session.
 	fn new_generation_session(&self, session_id: SessionId, origin: Option<Address>, author: Address, threshold: usize) -> Result<Arc<GenerationSession>, Error>;
 	/// Start new encryption session.
-	fn new_encryption_session(&self, session_id: SessionId, author: Requester, common_point: Public, encrypted_point: Public) -> Result<Arc<EncryptionSession>, Error>;
+	fn new_encryption_session(&self, session_id: SessionId, author: Requester, common_point: NodeId, encrypted_point: NodeId) -> Result<Arc<EncryptionSession>, Error>;
 	/// Start new decryption session.
 	fn new_decryption_session(&self, session_id: SessionId, origin: Option<Address>, requester: Requester, version: Option<H256>, is_shadow_decryption: bool, is_broadcast_decryption: bool) -> Result<Arc<DecryptionSession>, Error>;
 	/// Start new Schnorr signing session.
@@ -976,7 +976,7 @@ impl ClusterClient for ClusterClientImpl {
 			session, &self.data.sessions.generation_sessions)
 	}
 
-	fn new_encryption_session(&self, session_id: SessionId, requester: Requester, common_point: Public, encrypted_point: Public) -> Result<Arc<EncryptionSession>, Error> {
+	fn new_encryption_session(&self, session_id: SessionId, requester: Requester, common_point: NodeId, encrypted_point: NodeId) -> Result<Arc<EncryptionSession>, Error> {
 		let mut connected_nodes = self.data.connections.connected_nodes()?;
 		connected_nodes.insert(self.data.self_key_pair.public().as_ref().into());
 
@@ -1143,7 +1143,7 @@ pub mod tests {
 		prelude::{future, Future},
 	};
 	use ethereum_types::{Address, H256};
-	use ethkey::{Random, Generator, Public, Signature, sign};
+	use ethkey::{Random, Generator, Signature, sign};
 	use key_server_cluster::{NodeId, SessionId, Requester, Error, DummyAclStorage, DummyKeyStorage,
 		MapKeyServerSet, PlainNodeKeyPair, KeyStorage};
 	use key_server_cluster::message::Message;
@@ -1182,7 +1182,7 @@ pub mod tests {
 			self.generation_requests_count.fetch_add(1, Ordering::Relaxed);
 			Err(Error::Internal("test-error".into()))
 		}
-		fn new_encryption_session(&self, _session_id: SessionId, _requester: Requester, _common_point: Public, _encrypted_point: Public) -> Result<Arc<EncryptionSession>, Error> { unimplemented!("test-only") }
+		fn new_encryption_session(&self, _session_id: SessionId, _requester: Requester, _common_point: NodeId, _encrypted_point: NodeId) -> Result<Arc<EncryptionSession>, Error> { unimplemented!("test-only") }
 		fn new_decryption_session(&self, _session_id: SessionId, _origin: Option<Address>, _requester: Requester, _version: Option<H256>, _is_shadow_decryption: bool, _is_broadcast_session: bool) -> Result<Arc<DecryptionSession>, Error> { unimplemented!("test-only") }
 		fn new_schnorr_signing_session(&self, _session_id: SessionId, _requester: Requester, _version: Option<H256>, _message_hash: H256) -> Result<Arc<SchnorrSigningSession>, Error> { unimplemented!("test-only") }
 		fn new_ecdsa_signing_session(&self, _session_id: SessionId, _requester: Requester, _version: Option<H256>, _message_hash: H256) -> Result<Arc<EcdsaSigningSession>, Error> { unimplemented!("test-only") }

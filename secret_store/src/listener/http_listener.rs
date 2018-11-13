@@ -141,7 +141,7 @@ impl KeyServerHttpHandler {
 					.map(|key_server|{
 						let common_point = Public::from_slice(&common_point[..])?;
 						let encrypted_document_key = Public::from_slice(&encrypted_document_key[..])?;
-						key_server.store_document_key(&document, &signature.into(), common_point, encrypted_document_key)
+						key_server.store_document_key(&document, &signature.into(), common_point.into(), encrypted_document_key.into())
 					})
 					.unwrap_or(Err(Error::Internal("KeyServer is already destroyed".into())))
 					.map_err(|err| {

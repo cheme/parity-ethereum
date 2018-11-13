@@ -17,7 +17,7 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use parking_lot::{Mutex, Condvar};
-use ethkey::{Public, Secret};
+use ethkey::Secret;
 use ethereum_types::H256;
 use key_server_cluster::{Error, NodeId, SessionId, Requester, SessionMeta, AclStorage, DocumentKeyShare};
 use key_server_cluster::cluster::{Cluster};
@@ -736,7 +736,7 @@ impl SessionCore {
 		}
 	}
 
-	pub fn disseminate_jobs(&self, consensus_session: &mut SigningConsensusSession, version: &H256, session_public: Public, session_secret_share: Secret, message_hash: H256) -> Result<(), Error> {
+	pub fn disseminate_jobs(&self, consensus_session: &mut SigningConsensusSession, version: &H256, session_public: NodeId, session_secret_share: Secret, message_hash: H256) -> Result<(), Error> {
 		let key_share = match self.key_share.as_ref() {
 			None => return Err(Error::InvalidMessage),
 			Some(key_share) => key_share,
@@ -964,6 +964,7 @@ mod tests {
 
 			// verify signature
 			let public = gl.master().joint_public_and_secret().unwrap().unwrap().0;
+			let public = Public::from_slice(&public[..]).unwrap();
 			let signature = sl.master().wait().unwrap();
 			assert!(math::verify_schnorr_signature(&public, &signature, &message_hash).unwrap());
 		}
@@ -988,8 +989,8 @@ mod tests {
 				author: Default::default(),
 				threshold: 0,
 				public: Default::default(),
-				common_point: Some(Random.generate().unwrap().public().clone()),
-				encrypted_point: Some(Random.generate().unwrap().public().clone()),
+				common_point: Some(Random.generate().unwrap().public().as_ref().into()),
+				encrypted_point: Some(Random.generate().unwrap().public().as_ref().into()),
 				versions: vec![DocumentKeyShareVersion {
 					hash: Default::default(),
 					id_numbers: nodes,
@@ -1046,8 +1047,8 @@ mod tests {
 				author: Default::default(),
 				threshold: 2,
 				public: Default::default(),
-				common_point: Some(Random.generate().unwrap().public().clone()),
-				encrypted_point: Some(Random.generate().unwrap().public().clone()),
+				common_point: Some(Random.generate().unwrap().public().as_ref().into()),
+				encrypted_point: Some(Random.generate().unwrap().public().as_ref().into()),
 				versions: vec![DocumentKeyShareVersion {
 					hash: Default::default(),
 					id_numbers: nodes,

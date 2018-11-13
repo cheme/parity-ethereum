@@ -489,14 +489,14 @@ impl Ord for SessionIdWithSubSession {
 	fn cmp(&self, other: &Self) -> ::std::cmp::Ordering {
 		match self.id.cmp(&other.id) {
 			::std::cmp::Ordering::Equal => {
-        // inefficient but only for id equal case
-        let mut self_a = H256::from(self.access_key.as_ref());
-        let mut oth_a = H256::from(other.access_key.as_ref());
-        let res = self_a.cmp(&oth_a);
-        Clear::clear(&mut self_a[..]);
-        Clear::clear(&mut oth_a[..]);
-        res
-      },
+				// inefficient but only for id equal case
+				let mut self_a = H256::from(self.access_key.as_ref());
+				let mut oth_a = H256::from(other.access_key.as_ref());
+				let res = self_a.cmp(&oth_a);
+				Clear::clear(&mut self_a[..]);
+				Clear::clear(&mut oth_a[..]);
+				res
+			},
 			r @ _ => r,
 		}
 	}

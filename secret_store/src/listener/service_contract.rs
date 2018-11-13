@@ -20,7 +20,7 @@ use ethabi::RawLog;
 use ethabi::FunctionOutputDecoder;
 use ethcore::client::{Client, BlockChainClient, BlockId, CallContract};
 use ethcore::filter::Filter;
-use ethkey::{Public, public_to_address, array_to_address};
+use ethkey::{public_to_address, array_to_address};
 use hash::keccak;
 use bytes::Bytes;
 use ethereum_types::{H256, U256, Address};
@@ -72,11 +72,11 @@ pub trait ServiceContract: Send + Sync {
 	/// Publish generated key.
 	fn read_pending_requests(&self) -> Box<Iterator<Item=(bool, ServiceTask)>>;
 	/// Publish generated server key.
-	fn publish_generated_server_key(&self, origin: &Address, server_key_id: &ServerKeyId, server_key: Public) -> Result<(), String>;
+	fn publish_generated_server_key(&self, origin: &Address, server_key_id: &ServerKeyId, server_key: NodeId) -> Result<(), String>;
 	/// Publish server key generation error.
 	fn publish_server_key_generation_error(&self, origin: &Address, server_key_id: &ServerKeyId) -> Result<(), String>;
 	/// Publish retrieved server key.
-	fn publish_retrieved_server_key(&self, origin: &Address, server_key_id: &ServerKeyId, server_key: Public, threshold: usize) -> Result<(), String>;
+	fn publish_retrieved_server_key(&self, origin: &Address, server_key_id: &ServerKeyId, server_key: NodeId, threshold: usize) -> Result<(), String>;
 	/// Publish server key retrieval error.
 	fn publish_server_key_retrieval_error(&self, origin: &Address, server_key_id: &ServerKeyId) -> Result<(), String>;
 	/// Publish stored document key.
@@ -84,9 +84,9 @@ pub trait ServiceContract: Send + Sync {
 	/// Publish document key store error.
 	fn publish_document_key_store_error(&self, origin: &Address, server_key_id: &ServerKeyId) -> Result<(), String>;
 	/// Publish retrieved document key common.
-	fn publish_retrieved_document_key_common(&self, origin: &Address, server_key_id: &ServerKeyId, requester: &Address, common_point: Public, threshold: usize) -> Result<(), String>;
+	fn publish_retrieved_document_key_common(&self, origin: &Address, server_key_id: &ServerKeyId, requester: &Address, common_point: NodeId, threshold: usize) -> Result<(), String>;
 	/// Publish retrieved document key personal.
-	fn publish_retrieved_document_key_personal(&self, origin: &Address, server_key_id: &ServerKeyId, requester: &Address, participants: &[Address], decrypted_secret: Public, shadow: Bytes) -> Result<(), String>;
+	fn publish_retrieved_document_key_personal(&self, origin: &Address, server_key_id: &ServerKeyId, requester: &Address, participants: &[Address], decrypted_secret: NodeId, shadow: Bytes) -> Result<(), String>;
 	/// Publish document key store error.
 	fn publish_document_key_retrieval_error(&self, origin: &Address, server_key_id: &ServerKeyId, requester: &Address) -> Result<(), String>;
 }
@@ -353,7 +353,7 @@ impl ServiceContract for OnChainServiceContract {
 		}
 	}
 
-	fn publish_generated_server_key(&self, origin: &Address, server_key_id: &ServerKeyId, server_key: Public) -> Result<(), String> {
+	fn publish_generated_server_key(&self, origin: &Address, server_key_id: &ServerKeyId, server_key: NodeId) -> Result<(), String> {
 		self.send_contract_transaction("publish_generated_server_key", origin, server_key_id, ServerKeyGenerationService::is_response_required,
 			|_, _| Ok(ServerKeyGenerationService::prepare_pubish_tx_data(server_key_id, &server_key)))
 	}
@@ -363,7 +363,7 @@ impl ServiceContract for OnChainServiceContract {
 			|_, _| Ok(ServerKeyGenerationService::prepare_error_tx_data(server_key_id)))
 	}
 
-	fn publish_retrieved_server_key(&self, origin: &Address, server_key_id: &ServerKeyId, server_key: Public, threshold: usize) -> Result<(), String> {
+	fn publish_retrieved_server_key(&self, origin: &Address, server_key_id: &ServerKeyId, server_key: NodeId, threshold: usize) -> Result<(), String> {
 		let threshold = serialize_threshold(threshold)?;
 		self.send_contract_transaction("publish_retrieved_server_key", origin, server_key_id, ServerKeyRetrievalService::is_response_required,
 			|_, _| Ok(ServerKeyRetrievalService::prepare_pubish_tx_data(server_key_id, server_key, threshold)))
@@ -384,7 +384,7 @@ impl ServiceContract for OnChainServiceContract {
 			|_, _| Ok(DocumentKeyStoreService::prepare_error_tx_data(server_key_id)))
 	}
 
-	fn publish_retrieved_document_key_common(&self, origin: &Address, server_key_id: &ServerKeyId, requester: &Address, common_point: Public, threshold: usize) -> Result<(), String> {
+	fn publish_retrieved_document_key_common(&self, origin: &Address, server_key_id: &ServerKeyId, requester: &Address, common_point: NodeId, threshold: usize) -> Result<(), String> {
 		let threshold = serialize_threshold(threshold)?;
 		self.send_contract_transaction("publish_retrieved_document_key_common", origin, server_key_id,
 			|client, contract_address, server_key_id, key_server|
@@ -394,7 +394,7 @@ impl ServiceContract for OnChainServiceContract {
 		)
 	}
 
-	fn publish_retrieved_document_key_personal(&self, origin: &Address, server_key_id: &ServerKeyId, requester: &Address, participants: &[Address], decrypted_secret: Public, shadow: Bytes) -> Result<(), String> {
+	fn publish_retrieved_document_key_personal(&self, origin: &Address, server_key_id: &ServerKeyId, requester: &Address, participants: &[Address], decrypted_secret: NodeId, shadow: Bytes) -> Result<(), String> {
 		self.send_contract_transaction("publish_retrieved_document_key_personal", origin, server_key_id, |_, _, _, _| true,
 		move |client, address|
 			DocumentKeyShadowRetrievalService::prepare_pubish_personal_tx_data(client, address, server_key_id, requester, participants, decrypted_secret, shadow)
@@ -465,8 +465,8 @@ impl ServerKeyGenerationService {
 	}
 
 	/// Prepare publish key transaction data.
-	pub fn prepare_pubish_tx_data(server_key_id: &ServerKeyId, server_key_public: &Public) -> Bytes {
-		service::functions::server_key_generated::encode_input(*server_key_id, server_key_public.as_ref())
+	pub fn prepare_pubish_tx_data(server_key_id: &ServerKeyId, server_key_public: &NodeId) -> Bytes {
+		service::functions::server_key_generated::encode_input(*server_key_id, server_key_public.to_vec())
 	}
 
 	/// Prepare error transaction data.
@@ -525,8 +525,8 @@ impl ServerKeyRetrievalService {
 	}
 
 	/// Prepare publish key transaction data.
-	pub fn prepare_pubish_tx_data(server_key_id: &ServerKeyId, server_key_public: Public, threshold: U256) -> Bytes {
-		service::functions::server_key_retrieved::encode_input(*server_key_id, server_key_public.as_ref(), threshold)
+	pub fn prepare_pubish_tx_data(server_key_id: &ServerKeyId, server_key_public: NodeId, threshold: U256) -> Bytes {
+		service::functions::server_key_retrieved::encode_input(*server_key_id, server_key_public.to_vec(), threshold)
 	}
 
 	/// Prepare error transaction data.
@@ -649,12 +649,12 @@ impl DocumentKeyShadowRetrievalService {
 	}
 
 	/// Prepare publish common key transaction data.
-	pub fn prepare_pubish_common_tx_data(server_key_id: &ServerKeyId, requester: &Address, common_point: Public, threshold: U256) -> Bytes {
-		service::functions::document_key_common_retrieved::encode_input(*server_key_id, *requester, common_point.as_ref(), threshold)
+	pub fn prepare_pubish_common_tx_data(server_key_id: &ServerKeyId, requester: &Address, common_point: NodeId, threshold: U256) -> Bytes {
+		service::functions::document_key_common_retrieved::encode_input(*server_key_id, *requester, common_point.to_vec(), threshold)
 	}
 
 	/// Prepare publish personal key transaction data.
-	pub fn prepare_pubish_personal_tx_data(client: &Client, contract_address: &Address, server_key_id: &ServerKeyId, requester: &Address, participants: &[Address], decrypted_secret: Public, shadow: Bytes) -> Result<Bytes, String> {
+	pub fn prepare_pubish_personal_tx_data(client: &Client, contract_address: &Address, server_key_id: &ServerKeyId, requester: &Address, participants: &[Address], decrypted_secret: NodeId, shadow: Bytes) -> Result<Bytes, String> {
 		let mut participants_mask = U256::default();
 		for participant in participants {
 			let participant_index = Self::map_key_server_address(client, contract_address, participant.clone())
@@ -662,7 +662,7 @@ impl DocumentKeyShadowRetrievalService {
 			participants_mask = participants_mask | (U256::one() << participant_index);
 		}
 		Ok(service::functions::document_key_personal_retrieved::encode_input(
-			*server_key_id, *requester, participants_mask, decrypted_secret.as_ref(), shadow
+			*server_key_id, *requester, participants_mask, decrypted_secret.to_vec(), shadow
 		))
 	}
 
@@ -746,25 +746,25 @@ fn serialize_threshold(threshold: usize) -> Result<U256, String> {
 pub mod tests {
 	use parking_lot::Mutex;
 	use bytes::Bytes;
-	use ethkey::Public;
 	use ethereum_types::Address;
 	use listener::service_contract_listener::ServiceTask;
 	use {ServerKeyId};
 	use super::ServiceContract;
+	use types::NodeId;
 
 	#[derive(Default)]
 	pub struct DummyServiceContract {
 		pub is_actual: bool,
 		pub logs: Vec<ServiceTask>,
 		pub pending_requests: Vec<(bool, ServiceTask)>,
-		pub generated_server_keys: Mutex<Vec<(ServerKeyId, Public)>>,
+		pub generated_server_keys: Mutex<Vec<(ServerKeyId, NodeId)>>,
 		pub server_keys_generation_failures: Mutex<Vec<ServerKeyId>>,
-		pub retrieved_server_keys: Mutex<Vec<(ServerKeyId, Public, usize)>>,
+		pub retrieved_server_keys: Mutex<Vec<(ServerKeyId, NodeId, usize)>>,
 		pub server_keys_retrieval_failures: Mutex<Vec<ServerKeyId>>,
 		pub stored_document_keys: Mutex<Vec<ServerKeyId>>,
 		pub document_keys_store_failures: Mutex<Vec<ServerKeyId>>,
-		pub common_shadow_retrieved_document_keys: Mutex<Vec<(ServerKeyId, Address, Public, usize)>>,
-		pub personal_shadow_retrieved_document_keys: Mutex<Vec<(ServerKeyId, Address, Vec<Address>, Public, Bytes)>>,
+		pub common_shadow_retrieved_document_keys: Mutex<Vec<(ServerKeyId, Address, NodeId, usize)>>,
+		pub personal_shadow_retrieved_document_keys: Mutex<Vec<(ServerKeyId, Address, Vec<Address>, NodeId, Bytes)>>,
 		pub document_keys_shadow_retrieval_failures: Mutex<Vec<(ServerKeyId, Address)>>,
 	}
 
@@ -781,7 +781,7 @@ pub mod tests {
 			Box::new(self.pending_requests.clone().into_iter())
 		}
 
-		fn publish_generated_server_key(&self, _origin: &Address, server_key_id: &ServerKeyId, server_key: Public) -> Result<(), String> {
+		fn publish_generated_server_key(&self, _origin: &Address, server_key_id: &ServerKeyId, server_key: NodeId) -> Result<(), String> {
 			self.generated_server_keys.lock().push((server_key_id.clone(), server_key.clone()));
 			Ok(())
 		}
@@ -791,7 +791,7 @@ pub mod tests {
 			Ok(())
 		}
 
-		fn publish_retrieved_server_key(&self, _origin: &Address, server_key_id: &ServerKeyId, server_key: Public, threshold: usize) -> Result<(), String> {
+		fn publish_retrieved_server_key(&self, _origin: &Address, server_key_id: &ServerKeyId, server_key: NodeId, threshold: usize) -> Result<(), String> {
 			self.retrieved_server_keys.lock().push((server_key_id.clone(), server_key.clone(), threshold));
 			Ok(())
 		}
@@ -811,12 +811,12 @@ pub mod tests {
 			Ok(())
 		}
 
-		fn publish_retrieved_document_key_common(&self, _origin: &Address, server_key_id: &ServerKeyId, requester: &Address, common_point: Public, threshold: usize) -> Result<(), String> {
-			self.common_shadow_retrieved_document_keys.lock().push((server_key_id.clone(), requester.clone(), common_point.clone(), threshold));
+		fn publish_retrieved_document_key_common(&self, _origin: &Address, server_key_id: &ServerKeyId, requester: &Address, common_point: NodeId, threshold: usize) -> Result<(), String> {
+			self.common_shadow_retrieved_document_keys.lock().push((server_key_id.clone(), requester.clone(), common_point, threshold));
 			Ok(())
 		}
 
-		fn publish_retrieved_document_key_personal(&self, _origin: &Address, server_key_id: &ServerKeyId, requester: &Address, participants: &[Address], decrypted_secret: Public, shadow: Bytes) -> Result<(), String> {
+		fn publish_retrieved_document_key_personal(&self, _origin: &Address, server_key_id: &ServerKeyId, requester: &Address, participants: &[Address], decrypted_secret: NodeId, shadow: Bytes) -> Result<(), String> {
 			self.personal_shadow_retrieved_document_keys.lock().push((server_key_id.clone(), requester.clone(), participants.iter().cloned().collect(), decrypted_secret, shadow));
 			Ok(())
 		}

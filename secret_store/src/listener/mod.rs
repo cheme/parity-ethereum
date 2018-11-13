@@ -78,7 +78,7 @@ impl ServerKeyGenerator for Listener {
 }
 
 impl DocumentKeyServer for Listener {
-	fn store_document_key(&self, key_id: &ServerKeyId, author: &Requester, common_point: Public, encrypted_document_key: Public) -> Result<(), Error> {
+	fn store_document_key(&self, key_id: &ServerKeyId, author: &Requester, common_point: NodeId, encrypted_document_key: NodeId) -> Result<(), Error> {
 		self.key_server.store_document_key(key_id, author, common_point, encrypted_document_key)
 	}
 
