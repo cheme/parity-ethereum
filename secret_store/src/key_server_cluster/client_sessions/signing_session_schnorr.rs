@@ -972,7 +972,7 @@ mod tests {
 	#[test]
 	fn schnorr_constructs_in_cluster_of_single_node() {
 		let mut nodes = BTreeMap::new();
-		let self_node_id = Random.generate().unwrap().public().clone();
+		let self_node_id: NodeId = Random.generate().unwrap().public().as_ref().into();
 		nodes.insert(self_node_id, Random.generate().unwrap().secret().clone());
 		match SessionImpl::new(SessionParams {
 			meta: SessionMeta {
@@ -1007,7 +1007,7 @@ mod tests {
 
 	#[test]
 	fn schnorr_fails_to_initialize_if_does_not_have_a_share() {
-		let self_node_id = Random.generate().unwrap().public().clone();
+		let self_node_id: NodeId = Random.generate().unwrap().public().as_ref().into();
 		let session = SessionImpl::new(SessionParams {
 			meta: SessionMeta {
 				id: SessionId::default(),
@@ -1029,9 +1029,9 @@ mod tests {
 	#[test]
 	fn schnorr_fails_to_initialize_if_threshold_is_wrong() {
 		let mut nodes = BTreeMap::new();
-		let self_node_id = Random.generate().unwrap().public().clone();
+		let self_node_id: NodeId = Random.generate().unwrap().public().as_ref().into();
 		nodes.insert(self_node_id.clone(), Random.generate().unwrap().secret().clone());
-		nodes.insert(Random.generate().unwrap().public().clone(), Random.generate().unwrap().secret().clone());
+		nodes.insert(Random.generate().unwrap().public().as_ref().into(), Random.generate().unwrap().secret().clone());
 		let session = SessionImpl::new(SessionParams {
 			meta: SessionMeta {
 				id: SessionId::default(),
@@ -1110,7 +1110,7 @@ mod tests {
 			message: GenerationMessage::ConfirmInitialization(ConfirmInitialization {
 				session: SessionId::default().into(),
 				session_nonce: 0,
-				derived_point: Public::default().into(),
+				derived_point: Public::default().as_ref().into(),
 			}),
 		}), Err(Error::InvalidStateForRequest));
 	}
@@ -1136,7 +1136,7 @@ mod tests {
 				nodes: BTreeMap::new(),
 				is_zero: false,
 				threshold: 1,
-				derived_point: Public::default().into(),
+				derived_point: Public::default().as_ref().into(),
 			})
 		}), Err(Error::InvalidMessage));
 	}
@@ -1234,7 +1234,7 @@ mod tests {
 			message: GenerationMessage::ConfirmInitialization(ConfirmInitialization {
 				session: SessionId::default().into(),
 				session_nonce: 0,
-				derived_point: Public::default().into(),
+				derived_point: Public::default().as_ref().into(),
 			}),
 		})), Err(Error::ReplayProtection));
 	}

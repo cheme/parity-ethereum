@@ -24,9 +24,11 @@ use hex::{ToHex, FromHex};
 
 use serde::{Serialize, Serializer, Deserialize, Deserializer};
 use serde::de::{Error, Visitor};
+use crypto::secp256k1::Secp256k1;
+use crypto::traits::asym::Asym;
 
 /// Helper trait for generic hex bytes encoding.
-pub trait HexEncodable: Sized + ::std::ops::Deref<Target=[u8]> {
+pub trait HexEncodable: Sized + ToHex {
 	fn from_bytes(bytes: Vec<u8>) -> Option<Self>;
 }
 
@@ -100,8 +102,7 @@ pub type Symmetric = HexEncode<H256>;
 
 impl<T: HexEncodable> Serialize for HexEncode<T> {
 	fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-		let data = &self.0[..];
-		let serialized = "0x".to_owned() + &data.to_hex();
+		let serialized = "0x".to_owned() + &self.0.to_hex();
 
 		serializer.serialize_str(serialized.as_ref())
 	}
@@ -139,6 +140,27 @@ impl<'a, T: HexEncodable> Visitor<'a> for HexEncodeVisitor<T> {
 
 	fn visit_string<E>(self, value: String) -> Result<Self::Value, E> where E: Error {
 		self.visit_str(value.as_ref())
+	}
+}
+
+impl AsRef<[u8]> for Public {
+	fn as_ref(&self) -> &[u8] {
+		self.0.as_ref()
+	}
+}
+
+impl HexEncodable for ::ethkey::Public {
+	fn from_bytes(bytes: Vec<u8>) -> Option<Self> {
+		Secp256k1::public_from_slice(&bytes[..])
+			.map(::ethkey::Public::from_pub).ok()
+	}
+}
+
+
+impl HexEncodable for Public {
+	fn from_bytes(bytes: Vec<u8>) -> Option<Self> {
+		Secp256k1::public_from_slice(&bytes[..])
+			.map(::ethkey::Public::from_pub).map(HexEncode).ok()
 	}
 }
 

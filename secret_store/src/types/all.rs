@@ -19,7 +19,7 @@ use std::collections::BTreeMap;
 use {ethkey, bytes, ethereum_types};
 
 /// Node id.
-pub type NodeId = ethkey::Public;
+pub type NodeId = ethereum_types::H512;
 /// Server key id. When key is used to encrypt document, it could be document contents hash.
 pub type ServerKeyId = ethereum_types::H256;
 /// Encrypted document key type.
@@ -31,7 +31,7 @@ pub type EncryptedMessageSignature = bytes::Bytes;
 /// Request signature type.
 pub type RequestSignature = ethkey::Signature;
 /// Public key type.
-pub use ethkey::Public;
+pub type Public = ethkey::Public;
 
 /// Secret store configuration
 #[derive(Debug, Clone)]
@@ -80,7 +80,7 @@ pub struct ClusterConfiguration {
 	/// This node address.
 	pub listener_address: NodeAddress,
 	/// All cluster nodes addresses.
-	pub nodes: BTreeMap<ethkey::Public, NodeAddress>,
+	pub nodes: BTreeMap<NodeId, NodeAddress>,
 	/// Key Server Set contract address. If None, servers from 'nodes' map are used.
 	pub key_server_set_contract_address: Option<ContractAddress>,
 	/// Allow outbound connections to 'higher' nodes.
@@ -97,9 +97,9 @@ pub struct ClusterConfiguration {
 #[derive(Clone, Debug, PartialEq)]
 pub struct EncryptedDocumentKeyShadow {
 	/// Decrypted secret point. It is partially decrypted if shadow decryption was requested.
-	pub decrypted_secret: ethkey::Public,
+	pub decrypted_secret: Public,
 	/// Shared common point.
-	pub common_point: Option<ethkey::Public>,
+	pub common_point: Option<Public>,
 	/// If shadow decryption was requested: shadow decryption coefficients, encrypted with requestor public.
 	pub decrypt_shadows: Option<Vec<Vec<u8>>>,
 }
@@ -110,7 +110,7 @@ pub enum Requester {
 	/// Requested with server key id signature.
 	Signature(ethkey::Signature),
 	/// Requested with public key.
-	Public(ethkey::Public),
+	Public(NodeId),
 	/// Requested with verified address.
 	Address(ethereum_types::Address),
 }
@@ -122,11 +122,22 @@ impl Default for Requester {
 }
 
 impl Requester {
+	pub fn node_id(&self, server_key_id: &ServerKeyId) -> Result<NodeId, String> {
+		match *self {
+			Requester::Signature(ref signature) => ethkey::recover(signature, server_key_id)
+				.map(|p| NodeId::from(p.as_ref()))
+				.map_err(|e| format!("bad signature: {}", e)),
+			Requester::Public(ref public) => Ok(public.clone()),
+			Requester::Address(_) => Err("cannot recover public from address".into()),
+		}
+	}
+
 	pub fn public(&self, server_key_id: &ServerKeyId) -> Result<Public, String> {
 		match *self {
 			Requester::Signature(ref signature) => ethkey::recover(signature, server_key_id)
 				.map_err(|e| format!("bad signature: {}", e)),
-			Requester::Public(ref public) => Ok(public.clone()),
+			Requester::Public(ref public) => Public::from_slice(&public[..])
+				.map_err(|e| format!("bad public: {}", e)),
 			Requester::Address(_) => Err("cannot recover public from address".into()),
 		}
 	}

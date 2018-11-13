@@ -18,7 +18,7 @@ use std::time::Duration;
 use rand::random;
 use hash::write_keccak;
 use mio::tcp::*;
-use ethereum_types::{H256, H520};
+use ethereum_types::{H256, H520, H512};
 use parity_bytes::Bytes;
 use rlp::{Rlp, RlpStream};
 use connection::Connection;
@@ -26,7 +26,6 @@ use node_table::NodeId;
 use io::{IoContext, StreamToken};
 use ethkey::{KeyPair, Public, Secret, recover, sign, Generator, Random};
 use ethkey::crypto::{ecdh, ecies};
-use crypto::traits::asym::SecretKey;
 use crypto::clear_on_drop::clear::Clear;
 use network::{Error, ErrorKind};
 use host::HostInfo;
@@ -62,7 +61,7 @@ pub struct Handshake {
 	/// Connection nonce
 	pub nonce: H256,
 	/// Handshake public key
-	pub remote_ephemeral: Public,
+	pub remote_ephemeral: Option<Public>,
 	/// Remote connection nonce.
 	pub remote_nonce: H256,
 	/// Remote `RLPx` protocol version.
@@ -90,7 +89,7 @@ impl Handshake {
 			state: HandshakeState::New,
 			ecdhe: Random.generate()?,
 			nonce: *nonce,
-			remote_ephemeral: Public::new(),
+			remote_ephemeral: None,
 			remote_nonce: H256::new(),
 			remote_version: PROTOCOL_VERSION,
 			auth_cipher: Bytes::new(),
@@ -103,7 +102,7 @@ impl Handshake {
 		self.originated = originated;
 		io.register_timer(self.connection.token, HANDSHAKE_TIMEOUT).ok();
 		if originated {
-			self.write_auth(io, host.secret(), host.id())?;
+			self.write_auth(io, host.secret(), &host.id())?;
 		}
 		else {
 			self.state = HandshakeState::ReadingAuth;
@@ -154,11 +153,12 @@ impl Handshake {
 		self.id.clone_from_slice(remote_public);
 		self.remote_nonce.clone_from_slice(remote_nonce);
 		self.remote_version = remote_version;
-		let mut shared = H256::from(&ecdh::agree(host_secret, &self.id)?.to_vec()[..]);
+		let pub_id = Public::from_slice(&self.id[..])?;
+		let mut shared = H256::from(ecdh::agree(host_secret, &pub_id)?.as_ref());
 		let signature = H520::from_slice(sig);
 		let sh_nonce = shared ^ self.remote_nonce;
 		Clear::clear(&mut shared[..]);
-		self.remote_ephemeral = recover(&signature.into(), &(sh_nonce))?;
+		self.remote_ephemeral = Some(recover(&signature.into(), &(sh_nonce))?);
 		Ok(())
 	}
 
@@ -200,7 +200,7 @@ impl Handshake {
 		let auth = ecies::decrypt(secret, &self.auth_cipher[0..2], &self.auth_cipher[2..])?;
 		let rlp = Rlp::new(&auth);
 		let signature: H520 = rlp.val_at(0)?;
-		let remote_public: Public = rlp.val_at(1)?;
+		let remote_public: H512 = rlp.val_at(1)?;
 		let remote_nonce: H256 = rlp.val_at(2)?;
 		let remote_version: u64 = rlp.val_at(3)?;
 		self.set_auth(secret, &signature, &remote_public, &remote_nonce, remote_version)?;
@@ -218,7 +218,7 @@ impl Handshake {
 		self.ack_cipher = data.to_vec();
 		match ecies::decrypt(secret, &[], data) {
 			Ok(ack) => {
-				self.remote_ephemeral.clone_from_slice(&ack[0..64]);
+				self.remote_ephemeral = Some(Public::from_slice(&ack[0..64])?);
 				self.remote_nonce.clone_from_slice(&ack[64..(64+32)]);
 				self.state = HandshakeState::StartSession;
 			}
@@ -242,7 +242,8 @@ impl Handshake {
 		self.ack_cipher.extend_from_slice(data);
 		let ack = ecies::decrypt(secret, &self.ack_cipher[0..2], &self.ack_cipher[2..])?;
 		let rlp = Rlp::new(&ack);
-		self.remote_ephemeral = rlp.val_at(0)?;
+		let p512: H512 = rlp.val_at(0)?;
+		self.remote_ephemeral = Some(Public::from_slice(&p512[..])?);
 		self.remote_nonce = rlp.val_at(1)?;
 		self.remote_version = rlp.val_at(2)?;
 		self.state = HandshakeState::StartSession;
@@ -250,10 +251,11 @@ impl Handshake {
 	}
 
 	/// Sends auth message
-	fn write_auth<Message>(&mut self, io: &IoContext<Message>, secret: &Secret, public: &Public) -> Result<(), Error> where Message: Send + Clone + Sync + 'static {
+	fn write_auth<Message>(&mut self, io: &IoContext<Message>, secret: &Secret, public: &H512) -> Result<(), Error> where Message: Send + Clone + Sync + 'static {
 		trace!(target: "network", "Sending handshake auth to {:?}", self.connection.remote_addr_str());
 		let mut data = [0u8; /*Signature::SIZE*/ 65 + /*H256::SIZE*/ 32 + /*Public::SIZE*/ 64 + /*H256::SIZE*/ 32 + 1]; //TODO: use associated constants
 		let len = data.len();
+		let publ = Public::from_slice(&self.id[..])?;
 		{
 			data[len - 1] = 0x0;
 			let (sig, rest) = data.split_at_mut(65);
@@ -262,15 +264,15 @@ impl Handshake {
 			let (nonce, _) = rest.split_at_mut(32);
 
 			// E(remote-pubk, S(ecdhe-random, ecdh-shared-secret^nonce) || H(ecdhe-random-pubk) || pubk || nonce || 0x0)
-			let mut shared = H256::from(&ecdh::agree(secret, &self.id)?.to_vec()[..]);
+			let mut shared = H256::from(ecdh::agree(secret, &publ)?.as_ref());
 			let sh_nonce = shared ^ self.nonce;
 			Clear::clear(&mut shared[..]);
 			sig.copy_from_slice(&*sign(self.ecdhe.secret(), &(sh_nonce))?);
-			write_keccak(self.ecdhe.public(), hepubk);
+			write_keccak(self.ecdhe.public().as_ref(), hepubk);
 			pubk.copy_from_slice(public);
 			nonce.copy_from_slice(&self.nonce);
 		}
-		let message = ecies::encrypt(&self.id, &[], &data)?;
+		let message = ecies::encrypt(&publ, &[], &data)?;
 		self.auth_cipher = message.clone();
 		self.connection.send(io, message);
 		self.connection.expect(V4_ACK_PACKET_SIZE);
@@ -287,10 +289,12 @@ impl Handshake {
 			data[len - 1] = 0x0;
 			let (epubk, rest) = data.split_at_mut(64);
 			let (nonce, _) = rest.split_at_mut(32);
-			self.ecdhe.public().copy_to(epubk);
+			epubk.copy_from_slice(self.ecdhe.public().as_ref());
 			self.nonce.copy_to(nonce);
 		}
-		let message = ecies::encrypt(&self.id, &[], &data)?;
+    // TODO instantiate each time is bad : switch self.id type
+		let publ = Public::from_slice(&self.id[..])?;
+		let message = ecies::encrypt(&publ, &[], &data)?;
 		self.ack_cipher = message.clone();
 		self.connection.send(io, message);
 		self.state = HandshakeState::StartSession;
@@ -301,7 +305,7 @@ impl Handshake {
 	fn write_ack_eip8<Message>(&mut self, io: &IoContext<Message>) -> Result<(), Error> where Message: Send + Clone + Sync + 'static {
 		trace!(target: "network", "Sending EIP8 handshake ack to {:?}", self.connection.remote_addr_str());
 		let mut rlp = RlpStream::new_list(3);
-		rlp.append(self.ecdhe.public());
+		rlp.append(&H512::from(self.ecdhe.public().as_ref()));
 		rlp.append(&self.nonce);
 		rlp.append(&PROTOCOL_VERSION);
 
@@ -312,7 +316,8 @@ impl Handshake {
 		let encoded = rlp.drain();
 		let len = (encoded.len() + ECIES_OVERHEAD) as u16;
 		let prefix = [ (len >> 8) as u8, (len & 0xff) as u8 ];
-		let message = ecies::encrypt(&self.id, &prefix, &encoded)?;
+		let publ = Public::from_slice(&self.id[..])?;
+		let message = ecies::encrypt(&publ, &prefix, &encoded)?;
 		self.ack_cipher.extend_from_slice(&prefix);
 		self.ack_cipher.extend_from_slice(&message);
 		self.connection.send(io, self.ack_cipher.clone());
@@ -328,22 +333,21 @@ mod test {
 	use ethereum_types::H256;
 	use io::*;
 	use mio::tcp::TcpStream;
-	use ethkey::Public;
 
 	fn check_auth(h: &Handshake, version: u64) {
 		assert_eq!(h.id, "fda1cff674c90c9a197539fe3dfb53086ace64f83ed7c6eabec741f7f381cc803e52ab2cd55d5569bce4347107a310dfd5f88a010cd2ffd1005ca406f1842877".into());
 		assert_eq!(h.remote_nonce, "7e968bba13b6c50e2c4cd7f241cc0d64d1ac25c7f5952df231ac6a2bda8ee5d6".into());
-		assert_eq!(h.remote_ephemeral, "654d1044b69c577a44e5f01a1209523adb4026e70c62d1c13a067acabc09d2667a49821a0ad4b634554d330a15a58fe61f8a8e0544b310c6de7b0c8da7528a8d".into());
+		assert_eq!(h.remote_ephemeral.as_ref().unwrap(), &"654d1044b69c577a44e5f01a1209523adb4026e70c62d1c13a067acabc09d2667a49821a0ad4b634554d330a15a58fe61f8a8e0544b310c6de7b0c8da7528a8d".into());
 		assert_eq!(h.remote_version, version);
 	}
 
 	fn check_ack(h: &Handshake, version: u64) {
 		assert_eq!(h.remote_nonce, "559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd".into());
-		assert_eq!(h.remote_ephemeral, "b6d82fa3409da933dbf9cb0140c5dde89f4e64aec88d476af648880f4a10e1e49fe35ef3e69e93dd300b4797765a747c6384a6ecf5db9c2690398607a86181e4".into());
+		assert_eq!(h.remote_ephemeral.as_ref().unwrap(), &"b6d82fa3409da933dbf9cb0140c5dde89f4e64aec88d476af648880f4a10e1e49fe35ef3e69e93dd300b4797765a747c6384a6ecf5db9c2690398607a86181e4".into());
 		assert_eq!(h.remote_version, version);
 	}
 
-	fn create_handshake(to: Option<&Public>) -> Handshake {
+	fn create_handshake(to: Option<&H512>) -> Handshake {
 		let addr = "127.0.0.1:50556".parse().unwrap();
 		let socket = TcpStream::connect(&addr).unwrap();
 		let nonce = H256::new();

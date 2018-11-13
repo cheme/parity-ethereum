@@ -58,7 +58,7 @@ enum Request {
 	/// Generate server key.
 	GenerateServerKey(ServerKeyId, RequestSignature, usize),
 	/// Store document key.
-	StoreDocumentKey(ServerKeyId, RequestSignature, Public, Public),
+	StoreDocumentKey(ServerKeyId, RequestSignature, NodeId, NodeId),
 	/// Generate encryption key.
 	GenerateDocumentKey(ServerKeyId, RequestSignature, usize),
 	/// Request encryption key of given document for given requestor.
@@ -138,7 +138,11 @@ impl KeyServerHttpHandler {
 			},
 			Request::StoreDocumentKey(document, signature, common_point, encrypted_document_key) => {
 				return_empty(&req_uri, self.handler.key_server.upgrade()
-					.map(|key_server| key_server.store_document_key(&document, &signature.into(), common_point, encrypted_document_key))
+					.map(|key_server|{
+						let common_point = Public::from_slice(&common_point[..])?;
+						let encrypted_document_key = Public::from_slice(&encrypted_document_key[..])?;
+						key_server.store_document_key(&document, &signature.into(), common_point, encrypted_document_key)
+					})
 					.unwrap_or(Err(Error::Internal("KeyServer is already destroyed".into())))
 					.map_err(|err| {
 						warn!(target: "secretstore", "StoreDocumentKey request {} has failed with: {}", req_uri, err);
@@ -250,7 +254,7 @@ fn return_empty(req_uri: &Uri, empty: Result<(), Error>) -> HttpResponse<Body> {
 }
 
 fn return_server_public_key(req_uri: &Uri, server_public: Result<Public, Error>) -> HttpResponse<Body> {
-	return_bytes(req_uri, server_public.map(|k| Some(SerializablePublic(k))))
+	return_bytes(req_uri, server_public.map(|k| Some(SerializablePublic(k.as_ref().into()))))
 }
 
 fn return_message_signature(req_uri: &Uri, signature: Result<EncryptedDocumentKey, Error>) -> HttpResponse<Body> {
@@ -265,8 +269,8 @@ fn return_document_key_shadow(req_uri: &Uri, document_key_shadow: Result<Encrypt
 	-> HttpResponse<Body>
 {
 	return_bytes(req_uri, document_key_shadow.map(|k| Some(SerializableEncryptedDocumentKeyShadow {
-		decrypted_secret: k.decrypted_secret.into(),
-		common_point: k.common_point.expect("always filled when requesting document_key_shadow; qed").into(),
+		decrypted_secret: k.decrypted_secret.as_ref().into(),
+		common_point: k.common_point.expect("always filled when requesting document_key_shadow; qed").as_ref().into(),
 		decrypt_shadows: k.decrypt_shadows.expect("always filled when requesting document_key_shadow; qed").into_iter().map(Into::into).collect(),
 	})))
 }
@@ -471,7 +475,7 @@ mod tests {
 		// POST		/admin/servers_set_change/{old_set_signature}/{new_set_signature} + body
 		let node1: Public = "843645726384530ffb0c52f175278143b5a93959af7864460f5a4fec9afd1450cfb8aef63dec90657f43f55b13e0a73c7524d4e9a13c051b4e5f1e53f39ecd91".parse().unwrap();
 		let node2: Public = "07230e34ebfe41337d3ed53b186b3861751f2401ee74b988bba55694e2a6f60c757677e194be2e53c3523cc8548694e636e6acb35c4e8fdc5e29d28679b9b2f3".parse().unwrap();
-		let nodes = vec![node1, node2].into_iter().collect();
+		let nodes  = vec![node1, node2].into_iter().map(Into::into).collect();
 		assert_eq!(parse_request(&HttpMethod::POST, "/admin/servers_set_change/a199fb39e11eefb61c78a4074a53c0d4424600a3e74aad4fb9d93a26c30d067e1d4d29936de0c73f19827394a1dd049480a0d581aee7ae7546968da7d3d1c2fd01/b199fb39e11eefb61c78a4074a53c0d4424600a3e74aad4fb9d93a26c30d067e1d4d29936de0c73f19827394a1dd049480a0d581aee7ae7546968da7d3d1c2fd01",
 			&r#"["0x843645726384530ffb0c52f175278143b5a93959af7864460f5a4fec9afd1450cfb8aef63dec90657f43f55b13e0a73c7524d4e9a13c051b4e5f1e53f39ecd91",
 				"0x07230e34ebfe41337d3ed53b186b3861751f2401ee74b988bba55694e2a6f60c757677e194be2e53c3523cc8548694e636e6acb35c4e8fdc5e29d28679b9b2f3"]"#.as_bytes()),

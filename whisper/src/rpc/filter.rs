@@ -24,7 +24,6 @@ use ethkey::Public;
 use jsonrpc_macros::pubsub::{Subscriber, Sink};
 use parking_lot::{Mutex, RwLock};
 use rand::{Rng, OsRng};
-
 use message::{Message, Topic};
 use super::{key_store::KeyStore, types::{self, FilterItem, HexEncode}};
 

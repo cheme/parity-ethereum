@@ -31,7 +31,6 @@ use traits::{AdminSessionsServer, ServerKeyGenerator, DocumentKeyServer, Message
 use types::{Error, Public, RequestSignature, Requester, ServerKeyId, EncryptedDocumentKey, EncryptedDocumentKeyShadow,
 	ClusterConfiguration, MessageHash, EncryptedMessageSignature, NodeId};
 use key_server_cluster::{ClusterClient, ClusterConfiguration as NetClusterConfiguration};
-use crypto::traits::asym::SecretKey;
 
 /// Secret store key server implementation
 pub struct KeyServerImpl {
@@ -107,7 +106,7 @@ impl DocumentKeyServer for KeyServerImpl {
 		self.store_document_key(key_id, author, encrypted_document_key.common_point, encrypted_document_key.encrypted_point)?;
 
 		// encrypt document key with requestor public key
-		let document_key = crypto::ecies::encrypt(&public, &DEFAULT_MAC, &document_key)
+		let document_key = crypto::ecies::encrypt(&public, &DEFAULT_MAC, document_key.as_ref())
 			.map_err(|err| Error::Internal(format!("Error encrypting document key: {}", err)))?;
 		Ok(document_key)
 	}
@@ -124,7 +123,7 @@ impl DocumentKeyServer for KeyServerImpl {
 			.decrypted_secret;
 
 		// encrypt document key with requestor public key
-		let document_key = crypto::ecies::encrypt(&public, &DEFAULT_MAC, &document_key)
+		let document_key = crypto::ecies::encrypt(&public, &DEFAULT_MAC, document_key.as_ref())
 			.map_err(|err| Error::Internal(format!("Error encrypting document key: {}", err)))?;
 		Ok(document_key)
 	}
@@ -150,8 +149,8 @@ impl MessageSigner for KeyServerImpl {
 
 		// compose two message signature components into single one
 		let mut combined_signature = [0; 64];
-		combined_signature[..32].clone_from_slice(&message_signature.0.to_vec()[..]);
-		combined_signature[32..].clone_from_slice(&message_signature.1.to_vec()[..]);
+		combined_signature[..32].clone_from_slice(message_signature.0.as_ref());
+		combined_signature[32..].clone_from_slice(message_signature.1.as_ref());
 
 		// encrypt combined signature with requestor public key
 		let message_signature = crypto::ecies::encrypt(&public, &DEFAULT_MAC, &combined_signature)
@@ -249,7 +248,6 @@ pub mod tests {
 		Requester, NodeId};
 	use traits::{AdminSessionsServer, ServerKeyGenerator, DocumentKeyServer, MessageSigner, KeyServer};
 	use super::KeyServerImpl;
-	use crypto::traits::asym::SecretKey;
 
 	#[derive(Default)]
 	pub struct DummyKeyServer;
@@ -304,7 +302,7 @@ pub mod tests {
 					address: "127.0.0.1".into(),
 					port: start_port + (i as u16),
 				},
-				nodes: key_pairs.iter().enumerate().map(|(j, kp)| (kp.public().clone(),
+				nodes: key_pairs.iter().enumerate().map(|(j, kp)| (kp.public().into(),
 					NodeAddress {
 						address: "127.0.0.1".into(),
 						port: start_port + (j as u16),
@@ -314,7 +312,7 @@ pub mod tests {
 				admin_public: None,
 				auto_migrate_enabled: false,
 			}).collect();
-		let key_servers_set: BTreeMap<Public, SocketAddr> = configs[0].nodes.iter()
+		let key_servers_set: BTreeMap<NodeId, SocketAddr> = configs[0].nodes.iter()
 			.map(|(k, a)| (k.clone(), format!("{}:{}", a.address, a.port).parse().unwrap()))
 			.collect();
 		let key_storages = (0..num_nodes).map(|_| Arc::new(DummyKeyStorage::default())).collect::<Vec<_>>();
@@ -362,7 +360,7 @@ pub mod tests {
 
 		// generate document key
 		let threshold = 0;
-		let document = H256::from(&Random.generate().unwrap().secret().clone().to_vec()[..]);
+		let document = H256::from(Random.generate().unwrap().secret().as_ref());
 		let secret = Random.generate().unwrap().secret().clone();
 		let signature = ethkey::sign(&secret, &document).unwrap();
 		let generated_key = key_servers[0].generate_document_key(&document, &signature.clone().into(), threshold).unwrap();
@@ -384,7 +382,7 @@ pub mod tests {
 		let test_cases = [0, 1, 2];
 		for threshold in &test_cases {
 			// generate document key
-			let document = H256::from(&Random.generate().unwrap().secret().clone().to_vec()[..]);
+			let document = H256::from(Random.generate().unwrap().secret().as_ref());
 			let secret = Random.generate().unwrap().secret().clone();
 			let signature = ethkey::sign(&secret, &document).unwrap();
 			let generated_key = key_servers[0].generate_document_key(&document, &signature.clone().into(), *threshold).unwrap();
@@ -411,7 +409,7 @@ pub mod tests {
 		let test_cases = [0, 1, 2];
 		for threshold in &test_cases {
 			// generate server key
-			let server_key_id = H256::from(&Random.generate().unwrap().secret().clone().to_vec()[..]);
+			let server_key_id = H256::from(Random.generate().unwrap().secret().as_ref());
 			let requestor_secret = Random.generate().unwrap().secret().clone();
 			let signature = ethkey::sign(&requestor_secret, &server_key_id).unwrap();
 			let server_public = key_servers[0].generate_key(&server_key_id, &signature.clone().into(), *threshold).unwrap();
@@ -428,7 +426,7 @@ pub mod tests {
 			for key_server in key_servers.iter() {
 				let retrieved_key = key_server.restore_document_key(&server_key_id, &signature.clone().into()).unwrap();
 				let retrieved_key = crypto::ecies::decrypt(&requestor_secret, &DEFAULT_MAC, &retrieved_key).unwrap();
-				let retrieved_key = Public::from_slice(&retrieved_key);
+				let retrieved_key = Public::from_slice(&retrieved_key).unwrap();
 				assert_eq!(retrieved_key, generated_key);
 			}
 		}
@@ -442,7 +440,7 @@ pub mod tests {
 		let test_cases = [0, 1, 2];
 		for threshold in &test_cases {
 			// generate server key
-			let server_key_id = H256::from(&Random.generate().unwrap().secret().clone().to_vec()[..]);
+			let server_key_id = H256::from(Random.generate().unwrap().secret().as_ref());
 			let requestor_secret = Random.generate().unwrap().secret().clone();
 			let signature = ethkey::sign(&requestor_secret, &server_key_id).unwrap();
 			let server_public = key_servers[0].generate_key(&server_key_id, &signature.clone().into(), *threshold).unwrap();
@@ -466,7 +464,7 @@ pub mod tests {
 
 		// generate document key
 		let threshold = 0;
-		let document = H256::from(&Random.generate().unwrap().secret().clone().to_vec()[..]);
+		let document = H256::from(Random.generate().unwrap().secret().as_ref());
 		let secret = Random.generate().unwrap().secret().clone();
 		let signature = ethkey::sign(&secret, &document).unwrap();
 		let generated_key = key_servers[0].generate_document_key(&document, &signature.clone().into(), threshold).unwrap();
@@ -488,7 +486,7 @@ pub mod tests {
 		let threshold = 1;
 
 		// generate server key
-		let server_key_id = H256::from(&Random.generate().unwrap().secret().clone().to_vec()[..]);
+		let server_key_id = H256::from(Random.generate().unwrap().secret().as_ref());
 		let requestor_secret = Random.generate().unwrap().secret().clone();
 		let signature = ethkey::sign(&requestor_secret, &server_key_id).unwrap();
 		let server_public = key_servers[0].generate_key(&server_key_id, &signature.clone().into(), threshold).unwrap();
@@ -514,7 +512,7 @@ pub mod tests {
 		let threshold = 1;
 
 		// generate server key
-		let server_key_id = H256::from(&Random.generate().unwrap().secret().clone().to_vec()[..]);
+		let server_key_id = H256::from(Random.generate().unwrap().secret().as_ref());
 		let requestor_secret = Random.generate().unwrap().secret().clone();
 		let signature = ethkey::sign(&requestor_secret, &server_key_id).unwrap();
 		let server_public = key_servers[0].generate_key(&server_key_id, &signature.clone().into(), threshold).unwrap();

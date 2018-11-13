@@ -44,12 +44,11 @@ use key_server_cluster::{NodeId, Error, NodeKeyPair};
 use key_server_cluster::message::{Message, ClusterMessage, NodePublicKey, NodePrivateKeySignature};
 use key_server_cluster::io::{write_message, write_encrypted_message, WriteMessage, ReadMessage,
 	read_message, read_encrypted_message, fix_shared_key};
-use crypto::traits::asym::{SecretKey};
 
 /// Start handshake procedure with another node from the cluster.
 pub fn handshake<A>(a: A, self_key_pair: Arc<NodeKeyPair>, trusted_nodes: BTreeSet<NodeId>) -> Handshake<A> where A: AsyncWrite + AsyncRead {
 	let init_data = Random.generate().map(|kp| kp.secret().clone()).map_err(Into::into)
-		.and_then(|cp| Random.generate().map(|kp| (H256::from(&cp.to_vec()[..]), kp)).map_err(Into::into));
+		.and_then(|cp| Random.generate().map(|kp| (H256::from(cp.as_ref()), kp)).map_err(Into::into));
 	handshake_with_init_data(a, init_data, self_key_pair, trusted_nodes)
 }
 
@@ -57,7 +56,7 @@ pub fn handshake<A>(a: A, self_key_pair: Arc<NodeKeyPair>, trusted_nodes: BTreeS
 pub fn handshake_with_init_data<A>(a: A, init_data: Result<(H256, KeyPair), Error>, self_key_pair: Arc<NodeKeyPair>, trusted_nodes: BTreeSet<NodeId>) -> Handshake<A> where A: AsyncWrite + AsyncRead {
 	let handshake_input_data = init_data
 		.and_then(|(cp, kp)| sign(kp.secret(), &cp).map(|sp| (cp, kp, sp)).map_err(Into::into))
-		.and_then(|(cp, kp, sp)| Handshake::<A>::make_public_key_message(self_key_pair.public().clone(), cp.clone(), sp).map(|msg| (cp, kp, msg)));
+		.and_then(|(cp, kp, sp)| Handshake::<A>::make_public_key_message(self_key_pair.public().as_ref().into(), cp.clone(), sp).map(|msg| (cp, kp, msg)));
 
 	let (error, cp, kp, state) = match handshake_input_data {
 		Ok((cp, kp, msg)) => (None, cp, Some(kp), HandshakeState::SendPublicKey(write_message(a, msg))),
@@ -83,7 +82,7 @@ pub fn handshake_with_init_data<A>(a: A, init_data: Result<(H256, KeyPair), Erro
 pub fn accept_handshake<A>(a: A, self_key_pair: Arc<NodeKeyPair>) -> Handshake<A> where A: AsyncWrite + AsyncRead {
 	let self_confirmation_plain = Random.generate().map(|kp| kp.secret().clone()).map_err(Into::into);
 	let handshake_input_data = self_confirmation_plain
-		.and_then(|cp| Random.generate().map(|kp| (H256::from(&cp.to_vec()[..]), kp)).map_err(Into::into));
+		.and_then(|cp| Random.generate().map(|kp| (H256::from(cp.as_ref()), kp)).map_err(Into::into));
 
 	let (error, cp, kp, state) = match handshake_input_data {
 		Ok((cp, kp)) => (None, cp, Some(kp), HandshakeState::ReceivePublicKey(read_message(a))),
@@ -264,7 +263,7 @@ impl<A> Future for Handshake<A> where A: AsyncRead + AsyncWrite {
 						Err(err) => return Ok((stream, Err(err)).into()),
 					};
 
-					let message = match Handshake::<A>::make_public_key_message(self.self_key_pair.public().clone(), self.self_confirmation_plain.clone(), confirmation_signed_session) {
+					let message = match Handshake::<A>::make_public_key_message(self.self_key_pair.public().as_ref().into(), self.self_confirmation_plain.clone(), confirmation_signed_session) {
 						Ok(message) => message,
 						Err(err) => return Ok((stream, Err(err)).into()),
 					};
@@ -292,7 +291,9 @@ impl<A> Future for Handshake<A> where A: AsyncRead + AsyncWrite {
 				};
 
 				let peer_public = self.peer_node_id.as_ref().expect("peer_node_id is filled in ReceivePublicKey; ReceivePrivateKeySignature follows ReceivePublicKey; qed");
-				if !verify_public(peer_public, &*message.confirmation_signed, &self.self_confirmation_plain).unwrap_or(false) {
+        // [ECR] instantiation cost
+        let pk = ethkey::Public::from_slice(&peer_public[..]).map_err(|_|io::Error::new(io::ErrorKind::Other, "Invalid public key"))?;
+				if !verify_public(&pk, &*message.confirmation_signed, &self.self_confirmation_plain).unwrap_or(false) {
 					return Ok((stream, Err(Error::InvalidMessage)).into());
 				}
 
@@ -320,22 +321,22 @@ mod tests {
 	use futures::Future;
 	use ethkey::{Random, Generator, sign};
 	use ethereum_types::H256;
+	use types::NodeId;
 	use key_server_cluster::PlainNodeKeyPair;
 	use key_server_cluster::io::message::tests::TestIo;
 	use key_server_cluster::message::{Message, ClusterMessage, NodePublicKey, NodePrivateKeySignature};
 	use super::{handshake_with_init_data, accept_handshake, HandshakeResult};
-	use crypto::traits::asym::SecretKey;
 
 	fn prepare_test_io() -> (H256, TestIo) {
 		let mut io = TestIo::new();
 
-		let self_confirmation_plain = H256::from(&Random.generate().unwrap().secret().to_vec()[..]);
-		let peer_confirmation_plain = H256::from(&Random.generate().unwrap().secret().to_vec()[..]);
+		let self_confirmation_plain = H256::from(Random.generate().unwrap().secret().as_ref());
+		let peer_confirmation_plain = H256::from(Random.generate().unwrap().secret().as_ref());
 
 		let self_confirmation_signed = sign(io.peer_key_pair().secret(), &self_confirmation_plain).unwrap();
 		let peer_confirmation_signed = sign(io.peer_session_key_pair().secret(), &peer_confirmation_plain).unwrap();
 
-		let peer_public = io.peer_key_pair().public().clone();
+		let peer_public: NodeId = io.peer_key_pair().public().into();
 		io.add_input_message(Message::Cluster(ClusterMessage::NodePublicKey(NodePublicKey {
 			node_id: peer_public.into(),
 			confirmation_plain: peer_confirmation_plain.into(),
@@ -351,7 +352,7 @@ mod tests {
 	#[test]
 	fn active_handshake_works() {
 		let (self_confirmation_plain, io) = prepare_test_io();
-		let trusted_nodes: BTreeSet<_> = vec![io.peer_key_pair().public().clone()].into_iter().collect();
+		let trusted_nodes: BTreeSet<NodeId> = vec![io.peer_key_pair().public().into()].into_iter().collect();
 		let self_session_key_pair = io.self_session_key_pair().clone();
 		let self_key_pair = Arc::new(PlainNodeKeyPair::new(io.self_key_pair().clone()));
 		let shared_key = io.shared_key_pair().clone();
@@ -359,7 +360,7 @@ mod tests {
 		let handshake = handshake_with_init_data(io, Ok((self_confirmation_plain, self_session_key_pair)), self_key_pair, trusted_nodes);
 		let handshake_result = handshake.wait().unwrap();
 		assert_eq!(handshake_result.1, Ok(HandshakeResult {
-			node_id: handshake_result.0.peer_key_pair().public().clone(),
+			node_id: handshake_result.0.peer_key_pair().public().into(),
 			shared_key: shared_key,
 		}));
 	}
@@ -377,7 +378,7 @@ mod tests {
 
 		let handshake_result = handshake.wait().unwrap();
 		assert_eq!(handshake_result.1, Ok(HandshakeResult {
-			node_id: handshake_result.0.peer_key_pair().public().clone(),
+			node_id: handshake_result.0.peer_key_pair().public().into(),
 			shared_key: shared_key,
 		}));
 	}

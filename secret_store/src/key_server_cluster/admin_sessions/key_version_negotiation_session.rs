@@ -590,7 +590,7 @@ impl SessionResultComputer for LargestSupportResultComputer {
 mod tests {
 	use std::sync::Arc;
 	use std::collections::{VecDeque, BTreeMap, BTreeSet};
-	use ethkey::public_to_address;
+	use ethkey::array_to_address;
 	use key_server_cluster::{NodeId, SessionId, Error, KeyStorage, DummyKeyStorage,
 		DocumentKeyShare, DocumentKeyShareVersion};
 	use key_server_cluster::math;
@@ -602,8 +602,7 @@ mod tests {
 	use key_server_cluster::message::{Message, KeyVersionNegotiationMessage, RequestKeyVersions, KeyVersions};
 	use super::{SessionImpl, SessionTransport, SessionParams, FastestResultComputer, LargestSupportResultComputer,
 		SessionResultComputer, SessionState, ContinueAction, FailedContinueAction};
-	use ethereum_types::H256;
-	use crypto::traits::asym::SecretKey;
+	use ethereum_types::{H256, H512};
 
 	struct DummyTransport {
 		cluster: Arc<DummyCluster>,
@@ -633,7 +632,7 @@ mod tests {
 
 	impl MessageLoop {
 		pub fn prepare_nodes(nodes_num: usize) -> BTreeMap<NodeId, Arc<DummyKeyStorage>> {
-			(0..nodes_num).map(|_| (math::generate_random_point().unwrap(),
+			(0..nodes_num).map(|_| (math::generate_random_point().unwrap().as_ref().into(),
 				Arc::new(DummyKeyStorage::default()))).collect()
 		}
 
@@ -769,7 +768,7 @@ mod tests {
 		ml.session(0).initialize(ml.nodes.keys().cloned().collect()).unwrap();
 		assert_eq!(ml.session(0).data.lock().state, SessionState::WaitingForResponses);
 
-		let version_id = H256::from(&math::generate_random_scalar().unwrap().to_vec()[..]);
+		let version_id = H256::from(math::generate_random_scalar().unwrap().as_ref());
 		assert_eq!(ml.session(0).process_message(ml.node_id(1), &KeyVersionNegotiationMessage::KeyVersions(KeyVersions {
 			session: Default::default(),
 			sub_session: math::generate_random_scalar().unwrap().into(),
@@ -794,7 +793,7 @@ mod tests {
 		let ml = MessageLoop::empty(3);
 		ml.session(0).initialize(ml.nodes.keys().cloned().collect()).unwrap();
 
-		let version_id = H256::from(&math::generate_random_scalar().unwrap().to_vec()[..]);
+		let version_id = H256::from(math::generate_random_scalar().unwrap().as_ref());
 		assert_eq!(ml.session(0).process_message(ml.node_id(1), &KeyVersionNegotiationMessage::KeyVersions(KeyVersions {
 			session: Default::default(),
 			sub_session: math::generate_random_scalar().unwrap().into(),
@@ -816,7 +815,7 @@ mod tests {
 		let ml = MessageLoop::empty(2);
 		ml.session(0).initialize(ml.nodes.keys().cloned().collect()).unwrap();
 
-		let version_id = H256::from(&math::generate_random_scalar().unwrap().to_vec()[..]);
+		let version_id = H256::from(math::generate_random_scalar().unwrap().as_ref());
 		assert_eq!(ml.session(0).process_message(ml.node_id(1), &KeyVersionNegotiationMessage::KeyVersions(KeyVersions {
 			session: Default::default(),
 			sub_session: math::generate_random_scalar().unwrap().into(),
@@ -829,7 +828,7 @@ mod tests {
 	#[test]
 	fn fast_negotiation_does_not_completes_instantly_when_enough_share_owners_are_connected() {
 		let nodes = MessageLoop::prepare_nodes(2);
-		let version_id = H256::from(&math::generate_random_scalar().unwrap().to_vec()[..]);
+		let version_id = H256::from(math::generate_random_scalar().unwrap().as_ref());
 		nodes.values().nth(0).unwrap().insert(Default::default(), DocumentKeyShare {
 			author: Default::default(),
 			threshold: 1,
@@ -891,6 +890,6 @@ mod tests {
 
 		// slave nodes have non-empty failed continue action
 		assert!(ml.nodes.values().skip(1).all(|n| n.session.take_failed_continue_action()
-			== Some(FailedContinueAction::Decrypt(Some(1.into()), public_to_address(&2.into())))));
+			== Some(FailedContinueAction::Decrypt(Some(1.into()), array_to_address(&H512::from(2)[..])))));
 	}
 }

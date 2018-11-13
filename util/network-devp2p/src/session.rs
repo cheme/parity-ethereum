@@ -412,7 +412,7 @@ impl Session {
 			.append(&host.client_version())
 			.append_list(&host.capabilities)
 			.append(&host.local_endpoint.address.port())
-			.append(host.id());
+			.append(&host.id());
 		self.send(io, &rlp.drain())
 	}
 

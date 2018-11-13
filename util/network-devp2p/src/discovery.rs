@@ -21,7 +21,7 @@ use std::collections::hash_map::Entry;
 use std::default::Default;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use hash::keccak;
-use ethereum_types::{H256, H520};
+use ethereum_types::{H256, H520, H512};
 use rlp::{Rlp, RlpStream};
 use node_table::*;
 use network::{Error, ErrorKind};
@@ -150,9 +150,11 @@ pub struct TableUpdates {
 
 impl<'a> Discovery<'a> {
 	pub fn new(key: &KeyPair, public: NodeEndpoint, ip_filter: IpFilter) -> Discovery<'static> {
+    let p512 = H512::from(key.public().as_ref());
+    let id_hash = keccak(&p512);
 		Discovery {
-			id: *key.public(),
-			id_hash: keccak(key.public()),
+			id: p512,
+			id_hash,
 			secret: key.secret().clone(),
 			public_endpoint: public,
 			discovery_initiated: false,
@@ -434,7 +436,7 @@ impl<'a> Discovery<'a> {
 
 		let signed = &packet[(32 + 65)..];
 		let signature = H520::from_slice(&packet[32..(32 + 65)]);
-		let node_id = recover(&signature.into(), &keccak(signed))?;
+		let node_id = H512::from(recover(&signature.into(), &keccak(signed))?.as_ref());
 		let packet_id = signed[0];
 		let rlp = Rlp::new(&signed[1..]);
 		match packet_id {
@@ -901,7 +903,7 @@ mod tests {
 
 		// FIND_NODE times out because it doesn't receive k results.
 		let key = Random.generate().unwrap();
-		discovery.send_find_node(&node_entries[100], key.public()).unwrap();
+		discovery.send_find_node(&node_entries[100], &H512::from(key.public().as_ref())).unwrap();
 		for payload in Discovery::prepare_neighbours_packets(&node_entries[101..116]) {
 			let packet = assemble_packet(PACKET_NEIGHBOURS, &payload, &key.secret()).unwrap();
 			discovery.on_packet(&packet, from.clone()).unwrap();
@@ -913,7 +915,7 @@ mod tests {
 		assert!(removed > 0);
 
 		// FIND_NODE does not time out because it receives k results.
-		discovery.send_find_node(&node_entries[100], key.public()).unwrap();
+		discovery.send_find_node(&node_entries[100], &H512::from(key.public().as_ref())).unwrap();
 		for payload in Discovery::prepare_neighbours_packets(&node_entries[101..117]) {
 			let packet = assemble_packet(PACKET_NEIGHBOURS, &payload, &key.secret()).unwrap();
 			discovery.on_packet(&packet, from.clone()).unwrap();

@@ -152,10 +152,10 @@ impl SecretStoreEncryptor {
 
 		// decrypt Public
 		let decrypted_bytes = accounts.decrypt(requester, password, &crypto::DEFAULT_MAC, &encrypted_bytes)?;
-		let decrypted_key = Public::from_slice(&decrypted_bytes);
+		let decrypted_key = Public::from_slice(&decrypted_bytes)?;
 
 		// and now take x coordinate of Public as a key
-		let key: Bytes = (*decrypted_key)[..INIT_VEC_LEN].into();
+		let key: Bytes = decrypted_key.as_ref()[..INIT_VEC_LEN].into();
 
 		// cache the key in the session and clear expired sessions
 		self.sessions.lock().insert(*contract_address, EncryptionSession{

@@ -19,10 +19,10 @@ use std::ops::Deref;
 use rustc_hex::{ToHex, FromHex};
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
 use serde::de::{Visitor, Error as SerdeError};
-use ethkey::{Public, Secret, Signature};
+use ethkey::{Secret, Signature};
 use ethereum_types::{H160, H256};
 use bytes::Bytes;
-use types::Requester;
+use types::{NodeId, Requester};
 
 macro_rules! impl_bytes_deserialize {
 	($name: ident, $value: expr, true) => {
@@ -108,7 +108,7 @@ impl_bytes!(SerializableH256, H256, false, (Default, PartialOrd, Ord));
 /// Serializable H160.
 impl_bytes!(SerializableH160, H160, false, (Default));
 /// Serializable H512 (aka Public).
-impl_bytes!(SerializablePublic, Public, false, (Default, PartialOrd, Ord));
+impl_bytes!(SerializablePublic, NodeId, false, (Default, PartialOrd, Ord));
 /// Serializable Secret.
 impl_bytes!(SerializableSecret, Secret, false, ());
 /// Serializable Signature.

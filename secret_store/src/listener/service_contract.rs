@@ -20,7 +20,7 @@ use ethabi::RawLog;
 use ethabi::FunctionOutputDecoder;
 use ethcore::client::{Client, BlockChainClient, BlockId, CallContract};
 use ethcore::filter::Filter;
-use ethkey::{Public, public_to_address};
+use ethkey::{Public, public_to_address, array_to_address};
 use hash::keccak;
 use bytes::Bytes;
 use ethereum_types::{H256, U256, Address};
@@ -28,6 +28,7 @@ use listener::ApiMask;
 use listener::service_contract_listener::ServiceTask;
 use trusted_client::TrustedClient;
 use helpers::{get_confirmed_block_hash, REQUEST_CONFIRMATIONS_REQUIRED};
+use types::NodeId;
 use {ServerKeyId, NodeKeyPair, ContractAddress};
 
 use_contract!(service, "res/service.json");
@@ -465,7 +466,7 @@ impl ServerKeyGenerationService {
 
 	/// Prepare publish key transaction data.
 	pub fn prepare_pubish_tx_data(server_key_id: &ServerKeyId, server_key_public: &Public) -> Bytes {
-		service::functions::server_key_generated::encode_input(*server_key_id, server_key_public.to_vec())
+		service::functions::server_key_generated::encode_input(*server_key_id, server_key_public.as_ref())
 	}
 
 	/// Prepare error transaction data.
@@ -525,7 +526,7 @@ impl ServerKeyRetrievalService {
 
 	/// Prepare publish key transaction data.
 	pub fn prepare_pubish_tx_data(server_key_id: &ServerKeyId, server_key_public: Public, threshold: U256) -> Bytes {
-		service::functions::server_key_retrieved::encode_input(*server_key_id, server_key_public.to_vec(), threshold)
+		service::functions::server_key_retrieved::encode_input(*server_key_id, server_key_public.as_ref(), threshold)
 	}
 
 	/// Prepare error transaction data.
@@ -612,8 +613,8 @@ impl DocumentKeyStoreService {
 			*contract_address,
 			server_key_id,
 			author,
-			Public::from_slice(&common_point),
-			Public::from_slice(&encrypted_point),
+			NodeId::from_slice(&common_point),
+			NodeId::from_slice(&encrypted_point),
 		);
 
 		Ok((not_confirmed, task))
@@ -649,7 +650,7 @@ impl DocumentKeyShadowRetrievalService {
 
 	/// Prepare publish common key transaction data.
 	pub fn prepare_pubish_common_tx_data(server_key_id: &ServerKeyId, requester: &Address, common_point: Public, threshold: U256) -> Bytes {
-		service::functions::document_key_common_retrieved::encode_input(*server_key_id, *requester, common_point.to_vec(), threshold)
+		service::functions::document_key_common_retrieved::encode_input(*server_key_id, *requester, common_point.as_ref(), threshold)
 	}
 
 	/// Prepare publish personal key transaction data.
@@ -661,7 +662,7 @@ impl DocumentKeyShadowRetrievalService {
 			participants_mask = participants_mask | (U256::one() << participant_index);
 		}
 		Ok(service::functions::document_key_personal_retrieved::encode_input(
-			*server_key_id, *requester, participants_mask, decrypted_secret.to_vec(), shadow
+			*server_key_id, *requester, participants_mask, decrypted_secret.as_ref(), shadow
 		))
 	}
 
@@ -686,8 +687,8 @@ impl DocumentKeyShadowRetrievalService {
 			decoder.decode(&client.call_contract(*block, *contract_address, encoded)?)
 			.map_err(|e| e.to_string())?;
 
-		let requester = Public::from_slice(&requester);
-		let (encoded, decoder) = service::functions::is_document_key_shadow_retrieval_response_required::call(server_key_id, public_to_address(&requester), self_address);
+		let requester = NodeId::from_slice(&requester);
+		let (encoded, decoder) = service::functions::is_document_key_shadow_retrieval_response_required::call(server_key_id, array_to_address(&requester[..]), self_address);
 		let not_confirmed = decoder.decode(&client.call_contract(*block, *contract_address, encoded)?)
 			.map_err(|e| e.to_string())?;
 
@@ -700,7 +701,7 @@ impl DocumentKeyShadowRetrievalService {
 			false => ServiceTask::RetrieveShadowDocumentKeyCommon(
 				*contract_address,
 				server_key_id,
-				public_to_address(&requester),
+				array_to_address(&requester[..]),
 			),
 		};
 

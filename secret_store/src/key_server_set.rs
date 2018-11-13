@@ -22,9 +22,9 @@ use parking_lot::Mutex;
 use ethabi::FunctionOutputDecoder;
 use ethcore::client::{Client, BlockChainClient, BlockId, ChainNotify, ChainRoute, CallContract};
 use ethereum_types::{H256, Address};
-use ethkey::public_to_address;
+use ethkey::array_to_address;
 use bytes::Bytes;
-use types::{Error, Public, NodeAddress, NodeId};
+use types::{Error, NodeAddress, NodeId};
 use trusted_client::TrustedClient;
 use {NodeKeyPair, ContractAddress};
 
@@ -120,7 +120,7 @@ struct CachedContract {
 }
 
 impl OnChainKeyServerSet {
-	pub fn new(trusted_client: TrustedClient, contract_address_source: Option<ContractAddress>, self_key_pair: Arc<NodeKeyPair>, auto_migrate_enabled: bool, key_servers: BTreeMap<Public, NodeAddress>) -> Result<Arc<Self>, Error> {
+	pub fn new(trusted_client: TrustedClient, contract_address_source: Option<ContractAddress>, self_key_pair: Arc<NodeKeyPair>, auto_migrate_enabled: bool, key_servers: BTreeMap<NodeId, NodeAddress>) -> Result<Arc<Self>, Error> {
 		let client = trusted_client.get_untrusted();
 		let key_server_set = Arc::new(OnChainKeyServerSet {
 			contract: Mutex::new(CachedContract::new(trusted_client, contract_address_source, self_key_pair, auto_migrate_enabled, key_servers)?),
@@ -226,7 +226,7 @@ impl <F: Fn(Vec<u8>) -> Result<Vec<u8>, String>> KeyServerSubset<F> for NewKeySe
 }
 
 impl CachedContract {
-	pub fn new(client: TrustedClient, contract_address_source: Option<ContractAddress>, self_key_pair: Arc<NodeKeyPair>, auto_migrate_enabled: bool, key_servers: BTreeMap<Public, NodeAddress>) -> Result<Self, Error> {
+	pub fn new(client: TrustedClient, contract_address_source: Option<ContractAddress>, self_key_pair: Arc<NodeKeyPair>, auto_migrate_enabled: bool, key_servers: BTreeMap<NodeId, NodeAddress>) -> Result<Self, Error> {
 		let server_set = match contract_address_source.is_none() {
 			true => key_servers.into_iter()
 				.map(|(p, addr)| {
@@ -238,7 +238,7 @@ impl CachedContract {
 			false => Default::default(),
 		};
 
-		let mut contract =  CachedContract {
+		let mut contract = CachedContract {
 			client: client,
 			contract_address_source: contract_address_source,
 			contract_address: None,
@@ -289,7 +289,7 @@ impl CachedContract {
 	}
 
 	fn is_isolated(&self) -> bool {
-		!self.snapshot.current_set.contains_key(self.self_key_pair.public())
+		!self.snapshot.current_set.contains_key(&self.self_key_pair.public().as_ref().into())
 	}
 
 	fn snapshot(&self) -> KeyServerSetSnapshot {
@@ -383,14 +383,15 @@ impl CachedContract {
 							.map_err(|err| { trace!(target: "secretstore", "Error {} reading migration master from contract", err); err })
 							.ok()
 							.and_then(|address| current_set.keys().chain(migration_set.keys())
-								.find(|public| public_to_address(public) == address)
+								.find(|public| array_to_address(&public[..]) == address)
 								.cloned())
 					},
 					true => None,
 				};
 
+				let public_key = self.self_key_pair.public().as_ref().into();
 				let is_migration_confirmed = match migration_set.is_empty() {
-					false if current_set.contains_key(self.self_key_pair.public()) || migration_set.contains_key(self.self_key_pair.public()) => {
+					false if current_set.contains_key(&public_key) || migration_set.contains_key(&public_key) => {
 						let (encoded, decoder) = key_server::functions::is_migration_confirmed::call(self.self_key_pair.address());
 						do_call(encoded)
 							.map_err(|e| e.to_string())
@@ -432,7 +433,7 @@ impl CachedContract {
 		self.snapshot = new_snapshot;
 	}
 
-	fn read_key_server_set<T, F>(subset: T, do_call: F) -> BTreeMap<Public, SocketAddr>
+	fn read_key_server_set<T, F>(subset: T, do_call: F) -> BTreeMap<NodeId, SocketAddr>
 		where
 			T: KeyServerSubset<F>,
 			F: Fn(Vec<u8>) -> Result<Vec<u8>, String> {
@@ -443,7 +444,7 @@ impl CachedContract {
 			.unwrap_or_default();
 		for key_server in key_servers_list {
 			let key_server_public = subset.read_public(key_server, &do_call)
-				.and_then(|p| if p.len() == 64 { Ok(Public::from_slice(&p)) } else { Err(format!("Invalid public length {}", p.len())) });
+				.and_then(|p| if p.len() == 64 { Ok(NodeId::from_slice(&p)) } else { Err(format!("Invalid public length {}", p.len())) });
 			let key_server_address: Result<SocketAddr, _> = subset.read_address(key_server, &do_call)
 				.and_then(|a| a.parse().map_err(|e| format!("Invalid ip address: {}", e)));
 
@@ -583,18 +584,18 @@ pub mod tests {
 	use std::collections::BTreeMap;
 	use std::net::SocketAddr;
 	use ethereum_types::H256;
-	use ethkey::Public;
+	use types::NodeId;
 	use super::{update_future_set, update_number_of_confirmations, FutureNewSet,
 		KeyServerSet, KeyServerSetSnapshot, MIGRATION_CONFIRMATIONS_REQUIRED};
 
 	#[derive(Default)]
 	pub struct MapKeyServerSet {
 		is_isolated: bool,
-		nodes: BTreeMap<Public, SocketAddr>,
+		nodes: BTreeMap<NodeId, SocketAddr>,
 	}
 
 	impl MapKeyServerSet {
-		pub fn new(is_isolated: bool, nodes: BTreeMap<Public, SocketAddr>) -> Self {
+		pub fn new(is_isolated: bool, nodes: BTreeMap<NodeId, SocketAddr>) -> Self {
 			MapKeyServerSet {
 				is_isolated: is_isolated,
 				nodes: nodes,

@@ -19,16 +19,14 @@ pub use error::Error;
 
 /// ECDH functions
 pub mod ecdh {
-	use parity_crypto::secp256k1::Secp256k1;
-	use parity_crypto::traits::asym::{Asym, FixAsymSharedSecret};
+	use parity_crypto::traits::asym::{FixAsymSharedSecret};
 	use super::Error;
 	use {Secret, Public};
 
 	/// Agree on a shared secret
 	pub fn agree(secret: &Secret, public: &Public) -> Result<Secret, Error> {
 
-		let publ = Secp256k1::public_from_slice(&public[0..64])?;
-		let shared = secret.shared_secret(&publ)?;
+		let shared = secret.shared_secret(public)?;
 		Ok(Secret::from_unsafe_slice(&shared.as_ref()[0..32])?)
 	}
 }
@@ -36,7 +34,8 @@ pub mod ecdh {
 /// ECIES function
 pub mod ecies {
 	use parity_crypto::{aes, digest, hmac, is_equal};
-	use parity_crypto::traits::asym::{SecretKey};
+	use parity_crypto::secp256k1::Secp256k1;
+	use parity_crypto::traits::asym::{Asym};
 	use parity_crypto::clear_on_drop::clear::Clear;
 	use ethereum_types::H128;
 	use super::{ecdh, Error};
@@ -59,7 +58,7 @@ pub mod ecies {
 		msg[0] = 0x04u8;
 		{
 			let msgd = &mut msg[1..];
-			msgd[0..64].copy_from_slice(r.public());
+			msgd[0..64].copy_from_slice(r.public().as_ref());
 			let iv = H128::random();
 			msgd[64..80].copy_from_slice(&iv);
 			{
@@ -87,7 +86,7 @@ pub mod ecies {
 		}
 
 		let e = &encrypted[1..];
-		let p = Public::from_slice(&e[0..64]);
+		let p = Public::from_pub(Secp256k1::public_from_slice(&e[0..64])?);
 		let z = ecdh::agree(secret, &p)?;
 		let mut key = [0u8; 32];
 		kdf(&z, &[0u8; 0], &mut key);
@@ -123,7 +122,7 @@ pub mod ecies {
 		let mut ctr = 1u32;
 		let mut written = 0usize;
     let mut buf_secret = [0;32];
-    buf_secret.copy_from_slice(&secret.inner.to_vec()[..]);
+    buf_secret.copy_from_slice(secret.as_ref());
 
 		while written < dest.len() {
 			let mut hasher = digest::Hasher::sha256();

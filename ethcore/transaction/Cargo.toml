@@ -15,7 +15,8 @@ unexpected = { path = "../../util/unexpected" }
 ethereum-types = "0.4"
 
 [dev-dependencies]
-rustc-hex= "1.0"
+rustc-hex = "1.0"
+parity-crypto = "0.2"
 
 [features]
 json-tests = []

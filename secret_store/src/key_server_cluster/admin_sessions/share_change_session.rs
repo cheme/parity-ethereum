@@ -302,12 +302,12 @@ impl ShareChangeSessionPlan {
 
 #[cfg(test)]
 mod tests {
-	use key_server_cluster::math;
+	use key_server_cluster::{math, NodeId};
 	use super::prepare_share_change_session_plan;
 
 	#[test]
 	fn share_change_plan_creates_empty_plan() {
-		let cluster_nodes: Vec<_> = (0..3).map(|_| math::generate_random_point().unwrap()).collect();
+		let cluster_nodes: Vec<NodeId> = (0..3).map(|_| math::generate_random_point().unwrap().as_ref().into()).collect();
 		let master = cluster_nodes[0].clone();
 		let old_key_version_owners = cluster_nodes.iter().cloned().collect();
 		let new_nodes_set = cluster_nodes.iter().cloned().collect();
@@ -319,7 +319,7 @@ mod tests {
 
 	#[test]
 	fn share_change_plan_adds_new_nodes() {
-		let cluster_nodes: Vec<_> = (0..3).map(|_| math::generate_random_point().unwrap()).collect();
+		let cluster_nodes: Vec<NodeId> = (0..3).map(|_| math::generate_random_point().unwrap().as_ref().into()).collect();
 		let master = cluster_nodes[0].clone();
 		let old_key_version_owners = cluster_nodes[0..2].iter().cloned().collect();
 		let new_nodes_set = cluster_nodes.iter().cloned().collect();

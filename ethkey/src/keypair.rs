@@ -16,17 +16,22 @@
 
 use std::fmt;
 use parity_crypto::secp256k1::Secp256k1;
-use parity_crypto::traits::asym::{Asym, PublicKey};
+use parity_crypto::traits::asym::{Asym};
 use rustc_hex::ToHex;
 use keccak::Keccak256;
 use super::{Secret, Public, Address, Error};
 
 pub fn public_to_address(public: &Public) -> Address {
+	array_to_address(public.as_ref())
+}
+
+pub fn array_to_address(public: &[u8]) -> Address {
 	let hash = public.keccak256();
 	let mut result = Address::default();
 	result.copy_from_slice(&hash[12..]);
 	result
 }
+
 
 #[derive(Debug, Clone, PartialEq)]
 /// secp256k1 key pair
@@ -46,15 +51,11 @@ impl fmt::Display for KeyPair {
 impl KeyPair {
 	/// Create a pair from secret key
 	pub fn from_secret(secret: Secret) -> Result<KeyPair, Error> {
-		let pub_key = Secp256k1::public_from_secret(&secret)?;
-		let serialized = pub_key.to_vec();
-
-		let mut public = Public::default();
-		public.copy_from_slice(serialized.as_ref());
+		let public = Public::from_pub(Secp256k1::public_from_secret(&secret)?);
 
 		let keypair = KeyPair {
 			secret,
-			public,
+      public,
 		};
 
 		Ok(keypair)
@@ -64,15 +65,12 @@ impl KeyPair {
 		Self::from_secret(Secret::from_unsafe_slice(slice)?)
 	}
 
-	pub fn from_keypair(sec: <Secp256k1 as Asym>::SecretKey, publ: <Secp256k1 as Asym>::PublicKey) -> Self {
-		let serialized = publ.to_vec();
-		let mut public = Public::default();
-		public.copy_from_slice(serialized.as_ref());
-
-		let secret = Secret::from_sec(sec);
+	pub fn from_keypair(secret: <Secp256k1 as Asym>::SecretKey, public: <Secp256k1 as Asym>::PublicKey) -> Self {
+		let secret = Secret::from_sec(secret);
+		let public = Public::from_pub(public);
 		KeyPair {
-			secret: secret,
-			public: public,
+			secret,
+			public,
 		}
 	}
 

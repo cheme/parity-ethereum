@@ -60,7 +60,7 @@ pub struct SessionParams {
 	/// SessionImpl identifier.
 	pub id: SessionId,
 	/// Id of node, on which this session is running.
-	pub self_node_id: Public,
+	pub self_node_id: NodeId,
 	/// Encrypted data (result of running generation_session::SessionImpl).
 	pub encrypted_data: Option<DocumentKeyShare>,
 	/// Key storage.
@@ -169,8 +169,8 @@ impl SessionImpl {
 				session: self.id.clone().into(),
 				session_nonce: self.nonce,
 				requester: requester.into(),
-				common_point: common_point.into(),
-				encrypted_point: encrypted_point.into(),
+				common_point: common_point.as_ref().into(),
+				encrypted_point: encrypted_point.as_ref().into(),
 			})))
 		} else {
 			data.state = SessionState::Finished;
@@ -198,7 +198,7 @@ impl SessionImpl {
 			let requester: Requester = message.requester.clone().into();
 			let requester_address = requester.address(&self.id).map_err(Error::InsufficientRequesterData)?;
 			update_encrypted_data(&self.key_storage, self.id.clone(),
-				encrypted_data, requester_address, message.common_point.clone().into(), message.encrypted_point.clone().into())?;
+				encrypted_data, requester_address, Public::from_slice(&message.common_point[..])?, Public::from_slice(&message.encrypted_point[..])?)?;
 		}
 
 		// update state

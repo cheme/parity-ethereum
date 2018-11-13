@@ -19,7 +19,7 @@ use std::sync::Arc;
 use std::time;
 use parking_lot::{Mutex, Condvar};
 use ethereum_types::{Address, H256};
-use ethkey::Secret;
+use ethkey::{Public, Secret};
 use key_server_cluster::{Error, AclStorage, DocumentKeyShare, NodeId, SessionId, Requester,
 	EncryptedDocumentKeyShadow, SessionMeta};
 use key_server_cluster::cluster::Cluster;
@@ -380,9 +380,15 @@ impl SessionImpl {
 			_ => return Err(Error::InvalidMessage),
 		}
 
+		let common_point = if let Some(p) = message.common_point.as_ref() {
+			Some(Public::from_slice(&p[..])?)
+		} else {
+			None
+		};
+
 		Self::set_decryption_result(&self.core, &mut *data, Ok(EncryptedDocumentKeyShadow {
-				decrypted_secret: message.decrypted_secret.clone().into(),
-				common_point: message.common_point.clone().map(Into::into),
+				decrypted_secret: Public::from_slice(&message.decrypted_secret[..])?,
+				common_point,
 				decrypt_shadows: message.decrypt_shadows.clone().map(Into::into),
 			}));
 
@@ -479,7 +485,7 @@ impl SessionImpl {
 		let result = if is_master_node {
 			data.consensus_session.on_job_response(sender, PartialDecryptionResponse {
 				request_id: message.request_id.clone().into(),
-				shadow_point: message.shadow_point.clone().into(),
+				shadow_point: Public::from_slice(&message.shadow_point[..])?,
 				decrypt_shadow: message.decrypt_shadow.clone(),
 			})?;
 
@@ -505,7 +511,7 @@ impl SessionImpl {
 				Some(broadcast_job_session) => {
 					broadcast_job_session.on_partial_response(sender, PartialDecryptionResponse {
 						request_id: message.request_id.clone().into(),
-						shadow_point: message.shadow_point.clone().into(),
+						shadow_point: Public::from_slice(&message.shadow_point[..])?,
 						decrypt_shadow: message.decrypt_shadow.clone(),
 					})?;
 
@@ -654,8 +660,8 @@ impl SessionImpl {
 					session: core.meta.id.clone().into(),
 					sub_session: core.access_key.clone().into(),
 					session_nonce: nonce,
-					decrypted_secret: document_key.decrypted_secret.clone().into(),
-					common_point: document_key.common_point.clone().map(Into::into),
+					decrypted_secret: document_key.decrypted_secret.as_ref().into(),
+					common_point: document_key.common_point.clone().map(|p|p.as_ref().into()),
 					decrypt_shadows: document_key.decrypt_shadows.clone(),
 				}))),
 				Err(error) => core.cluster.send(&master, Message::Decryption(DecryptionMessage::DecryptionSessionError(DecryptionSessionError {
@@ -803,7 +809,7 @@ impl JobTransport for DecryptionJobTransport {
 				sub_session: self.access_key.clone().into(),
 				session_nonce: self.nonce,
 				request_id: response.request_id.into(),
-				shadow_point: response.shadow_point.into(),
+				shadow_point: response.shadow_point.as_ref().into(),
 				decrypt_shadow: response.decrypt_shadow,
 			})))?;
 		}
@@ -960,8 +966,8 @@ mod tests {
 
 	#[test]
 	fn constructs_in_cluster_of_single_node() {
-		let mut nodes = BTreeMap::new();
-		let self_node_id = Random.generate().unwrap().public().clone();
+		let mut nodes: BTreeMap<NodeId, _> = BTreeMap::new();
+		let self_node_id = Random.generate().unwrap().public().as_ref().into();
 		nodes.insert(self_node_id, Random.generate().unwrap().secret().clone());
 		match SessionImpl::new(SessionParams {
 			meta: SessionMeta {
@@ -996,7 +1002,7 @@ mod tests {
 
 	#[test]
 	fn fails_to_initialize_if_does_not_have_a_share() {
-		let self_node_id = Random.generate().unwrap().public().clone();
+		let self_node_id: NodeId = Random.generate().unwrap().public().as_ref().into();
 		let session = SessionImpl::new(SessionParams {
 			meta: SessionMeta {
 				id: SessionId::default(),
@@ -1018,9 +1024,9 @@ mod tests {
 	#[test]
 	fn fails_to_initialize_if_threshold_is_wrong() {
 		let mut nodes = BTreeMap::new();
-		let self_node_id = Random.generate().unwrap().public().clone();
+		let self_node_id: NodeId = Random.generate().unwrap().public().as_ref().into();
 		nodes.insert(self_node_id.clone(), Random.generate().unwrap().secret().clone());
-		nodes.insert(Random.generate().unwrap().public().clone(), Random.generate().unwrap().secret().clone());
+		nodes.insert(Random.generate().unwrap().public().as_ref().into(), Random.generate().unwrap().secret().clone());
 		let session = SessionImpl::new(SessionParams {
 			meta: SessionMeta {
 				id: SessionId::default(),
@@ -1132,7 +1138,7 @@ mod tests {
 			sub_session: sessions[0].access_key().clone().into(),
 			session_nonce: 0,
 			request_id: Random.generate().unwrap().secret().clone().into(),
-			shadow_point: Random.generate().unwrap().public().clone().into(),
+			shadow_point: Random.generate().unwrap().public().clone().as_ref().into(),
 			decrypt_shadow: None,
 		}).unwrap_err(), Error::InvalidStateForRequest);
 	}

@@ -28,6 +28,8 @@ extern crate serde;
 extern crate tiny_keccak;
 
 #[macro_use]
+extern crate lazy_static;
+#[macro_use]
 extern crate log;
 #[macro_use]
 extern crate serde_derive;
@@ -52,18 +54,19 @@ pub use self::parity_wordlist::Error as WordlistError;
 pub use self::brain::Brain;
 pub use self::brain_prefix::BrainPrefix;
 pub use self::error::Error;
-pub use self::keypair::{KeyPair, public_to_address};
+pub use self::keypair::{KeyPair, public_to_address, array_to_address};
 pub use self::math::public_is_valid;
 pub use self::password::Password;
 pub use self::prefix::Prefix;
 pub use self::random::Random;
 pub use self::signature::{sign, verify_public, verify_address, recover, Signature};
-pub use self::secret::Secret;
+pub use self::secret::{Public, Secret};
 pub use self::extended::{ExtendedPublic, ExtendedSecret, ExtendedKeyPair, DerivationError, Derivation};
 
 use ethereum_types::H256;
 
-pub use ethereum_types::{Address, Public};
+pub use ethereum_types::Address;
+
 pub type Message = H256;
 
 /// Uninstantiatable error type for infallible generators.

@@ -467,12 +467,22 @@ impl<T> SessionImpl<T> where T: SessionTransport {
 
 		// update data
 		data.state = SessionState::WaitingForKeysDissemination;
+		let common_point = if let Some(p) = message.common_point.as_ref() {
+			Some(Public::from_slice(&p[..])?)
+		} else {
+			None
+		};
+		let encrypted_point = if let Some(p) = message.encrypted_point.as_ref() {
+			Some(Public::from_slice(&p[..])?)
+		} else {
+			None
+		};
 		data.new_key_share = Some(NewKeyShare {
 			threshold: message.threshold,
 			author: message.author.clone().into(),
-			joint_public: message.joint_public.clone().into(),
-			common_point: message.common_point.clone().map(Into::into),
-			encrypted_point: message.encrypted_point.clone().map(Into::into),
+			joint_public: Public::from_slice(&message.joint_public[..])?,
+			common_point,
+			encrypted_point,
 		});
 
 		let id_numbers = data.id_numbers.as_mut()
@@ -646,9 +656,9 @@ impl<T> SessionImpl<T> where T: SessionTransport {
 				session_nonce: core.nonce,
 				threshold: old_key_share.threshold,
 				author: old_key_share.author.clone().into(),
-				joint_public: old_key_share.public.clone().into(),
-				common_point: old_key_share.common_point.clone().map(Into::into),
-				encrypted_point: old_key_share.encrypted_point.clone().map(Into::into),
+				joint_public: old_key_share.public.as_ref().into(),
+				common_point: old_key_share.common_point.clone().map(|p|p.as_ref().into()),
+				encrypted_point: old_key_share.encrypted_point.clone().map(|p|p.as_ref().into()),
 				id_numbers: old_key_version.id_numbers.iter()
 					.filter(|&(k, _)| version_holders.contains(k))
 					.map(|(k, v)| (k.clone().into(), v.clone().into())).collect(),

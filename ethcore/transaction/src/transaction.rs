@@ -472,8 +472,8 @@ impl SignedTransaction {
 	}
 
 	/// Returns a public key of the sender.
-	pub fn public_key(&self) -> Option<Public> {
-		self.public
+	pub fn public_key(&self) -> Option<&Public> {
+		self.public.as_ref()
 	}
 
 	/// Checks is signature is empty.
@@ -563,6 +563,7 @@ impl From<SignedTransaction> for PendingTransaction {
 
 #[cfg(test)]
 mod tests {
+  extern crate parity_crypto;
 	use super::*;
 	use ethereum_types::U256;
 	use hash::keccak;
@@ -617,7 +618,7 @@ mod tests {
 			value: U256::from(1),
 			data: b"Hello!".to_vec()
 		}.sign(&key.secret(), None);
-		assert_eq!(Address::from(keccak(key.public())), t.sender());
+		assert_eq!(Address::from(keccak(key.public().as_ref())), t.sender());
 		assert_eq!(t.chain_id(), None);
 	}
 
@@ -651,7 +652,7 @@ mod tests {
 			value: U256::from(1),
 			data: b"Hello!".to_vec()
 		}.sign(&key.secret(), Some(69));
-		assert_eq!(Address::from(keccak(key.public())), t.sender());
+		assert_eq!(Address::from(keccak(key.public().as_ref())), t.sender());
 		assert_eq!(t.chain_id(), Some(69));
 	}
 

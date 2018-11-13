@@ -86,6 +86,7 @@ error_chain! {
 		SocketIo(IoError) #[doc = "Socket IO error."];
 		Decompression(snappy::InvalidInput) #[doc = "Decompression error."];
 		Rlp(rlp::DecoderError) #[doc = "Rlp decoder error."];
+		Crypto(crypto::Error) #[doc = "Crypto error."];
 	}
 
 	errors {

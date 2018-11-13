@@ -20,7 +20,7 @@ use std::fmt;
 use std::str::FromStr;
 use std::hash::{Hash, Hasher};
 use parity_crypto::secp256k1::Secp256k1;
-use parity_crypto::traits::asym::{Asym, SecretKey};
+use parity_crypto::traits::asym::{Asym, SecretKey, PublicKey};
 use rustc_hex::{ToHex, FromHex};
 use ethereum_types::{H520, H256};
 use {Secret, Public, Error, Message, public_to_address, Address};
@@ -195,7 +195,7 @@ pub fn sign(secret: &Secret, message: &Message) -> Result<Signature, Error> {
 }
 
 pub fn verify_public(public: &Public, signature: &Signature, message: &Message) -> Result<bool, Error> {
-	Secp256k1::verify_public(&public[..], &signature[..], &message[..]).map_err(|e|e.into())
+	public.verify(&signature[..], &message[..]).map_err(|e|e.into())
 }
 
 pub fn verify_address(address: &Address, signature: &Signature, message: &Message) -> Result<bool, Error> {
@@ -205,7 +205,7 @@ pub fn verify_address(address: &Address, signature: &Signature, message: &Messag
 }
 
 pub fn recover(signature: &Signature, message: &Message) -> Result<Public, Error> {
-	Ok(Secp256k1::recover(&signature[..], &message[..])?[..].into())
+	Ok(Public::from_pub(Secp256k1::recover(&signature[..], &message[..])?))
 }
 
 #[cfg(test)]

@@ -21,7 +21,7 @@ use std::time::Duration;
 use std::thread;
 use parking_lot::Mutex;
 use ethcore::client::{ChainNotify, ChainRoute};
-use ethkey::{Public, public_to_address};
+use ethkey::{Public, array_to_address};
 use bytes::Bytes;
 use ethereum_types::{H256, U256, Address};
 use key_server_set::KeyServerSet;
@@ -117,11 +117,11 @@ pub enum ServiceTask {
 	/// Retrieve server key (origin, server_key_id).
 	RetrieveServerKey(Address, ServerKeyId),
 	/// Store document key (origin, server_key_id, author, common_point, encrypted_point).
-	StoreDocumentKey(Address, ServerKeyId, Address, Public, Public),
+	StoreDocumentKey(Address, ServerKeyId, Address, NodeId, NodeId),
 	/// Retrieve common data of document key (origin, server_key_id, requester).
 	RetrieveShadowDocumentKeyCommon(Address, ServerKeyId, Address),
 	/// Retrieve personal data of document key (origin, server_key_id, requester).
-	RetrieveShadowDocumentKeyPersonal(Address, ServerKeyId, Public),
+	RetrieveShadowDocumentKeyPersonal(Address, ServerKeyId, NodeId),
 	/// Shutdown listener.
 	Shutdown,
 }
@@ -175,7 +175,7 @@ impl ServiceContractListener {
 		match task {
 			// when this node should be master of this server key generation session
 			ServiceTask::GenerateServerKey(origin, server_key_id, author, threshold) if is_processed_by_this_key_server(
-				&*data.key_server_set, data.self_key_pair.public(), &server_key_id) =>
+				&*data.key_server_set, &data.self_key_pair.public().into(), &server_key_id) =>
 				Some(ServiceTask::GenerateServerKey(origin, server_key_id, author, threshold)),
 			// when server key is not yet generated and generation must be initiated by other node
 			ServiceTask::GenerateServerKey(_, _, _, _) => None,
@@ -194,7 +194,7 @@ impl ServiceContractListener {
 
 			// when this node should be master of this document key decryption session
 			ServiceTask::RetrieveShadowDocumentKeyPersonal(origin, server_key_id, requester) if is_processed_by_this_key_server(
-				&*data.key_server_set, data.self_key_pair.public(), &server_key_id) =>
+				&*data.key_server_set, &data.self_key_pair.public().into(), &server_key_id) =>
 				Some(ServiceTask::RetrieveShadowDocumentKeyPersonal(origin, server_key_id, requester)),
 			// when server key is not yet generated and generation must be initiated by other node
 			ServiceTask::RetrieveShadowDocumentKeyPersonal(_, _, _) => None,
@@ -236,6 +236,10 @@ impl ServiceContractListener {
 			},
 			&ServiceTask::StoreDocumentKey(origin, server_key_id, author, common_point, encrypted_point) => {
 				data.retry_data.lock().affected_document_keys.insert((server_key_id.clone(), author.clone()));
+				let common_point = Public::from_slice(&common_point[..])
+					.map_err(|e| format!("Invalid common point : {:?}", e))?;
+				let encrypted_point = Public::from_slice(&encrypted_point[..])
+					.map_err(|e| format!("Invalid encrypted point : {:?}", e))?;
 				log_service_task_result(&task, data.self_key_pair.public(),
 					Self::store_document_key(&data, origin, &server_key_id, &author, &common_point, &encrypted_point))
 			},
@@ -289,7 +293,7 @@ impl ServiceContractListener {
 					ServiceTask::RetrieveShadowDocumentKeyCommon(_, ref key, ref author)
 					if retry_data.affected_document_keys.contains(&(key.clone(), author.clone())) => continue,
 				ServiceTask::RetrieveShadowDocumentKeyPersonal(_, ref key, ref requester)
-					if retry_data.affected_document_keys.contains(&(key.clone(), public_to_address(requester))) => continue,
+					if retry_data.affected_document_keys.contains(&(key.clone(), array_to_address(&requester[..]))) => continue,
 				_ => (),
 			}
 
@@ -380,7 +384,7 @@ impl ServiceContractListener {
 		let retrieval_result = data.acl_storage.check(requester.clone(), server_key_id)
 			.and_then(|is_allowed| if !is_allowed { Err(Error::AccessDenied) } else { Ok(()) })
 			.and_then(|_| data.key_storage.get(server_key_id).and_then(|key_share| key_share.ok_or(Error::ServerKeyIsNotFound)))
-			.and_then(|key_share| key_share.common_point
+			.and_then(|key_share| key_share.common_point.clone()
 				.ok_or(Error::DocumentKeyIsNotFound)
 				.and_then(|common_point| math::make_common_shadow_point(key_share.threshold, common_point))
 				.map(|common_point| (common_point, key_share.threshold)));
@@ -400,9 +404,9 @@ impl ServiceContractListener {
 	}
 
 	/// Retrieve personal part of document key (start decryption session).
-	fn retrieve_document_key_personal(data: &Arc<ServiceContractListenerData>, origin: Address, server_key_id: &ServerKeyId, requester: Public) -> Result<(), String> {
-		Self::process_document_key_retrieval_result(data, origin, server_key_id, &public_to_address(&requester), data.cluster.new_decryption_session(
-			server_key_id.clone(), Some(origin), requester.clone().into(), None, true, true).map(|_| None).map_err(Into::into))
+	fn retrieve_document_key_personal(data: &Arc<ServiceContractListenerData>, origin: Address, server_key_id: &ServerKeyId, requester: NodeId) -> Result<(), String> {
+		Self::process_document_key_retrieval_result(data, origin, server_key_id, &array_to_address(&requester[..]), data.cluster.new_decryption_session(
+			server_key_id.clone(), Some(origin), requester.into(), None, true, true).map(|_| None).map_err(Into::into))
 	}
 
 	/// Process document key retrieval result.
@@ -488,9 +492,9 @@ impl ClusterSessionsListener<DecryptionSession> for ServiceContractListener {
 				let retrieval_result = retrieval_result.map(|key_shadow|
 					session.broadcast_shadows()
 						.and_then(|broadcast_shadows|
-							broadcast_shadows.get(self.data.self_key_pair.public())
+							broadcast_shadows.get(&self.data.self_key_pair.public().as_ref().into())
 								.map(|self_shadow| (
-									broadcast_shadows.keys().map(public_to_address).collect(),
+									broadcast_shadows.keys().map(|k|array_to_address(&k[..])).collect(),
 									key_shadow.decrypted_secret,
 									self_shadow.clone()
 								)))
@@ -543,7 +547,7 @@ impl ::std::fmt::Display for ServiceTask {
 			ServiceTask::RetrieveShadowDocumentKeyCommon(_, ref server_key_id, ref requester) =>
 				write!(f, "RetrieveShadowDocumentKeyCommon({}, {})", server_key_id, requester),
 			ServiceTask::RetrieveShadowDocumentKeyPersonal(_, ref server_key_id, ref requester) =>
-				write!(f, "RetrieveShadowDocumentKeyPersonal({}, {})", server_key_id, public_to_address(requester)),
+				write!(f, "RetrieveShadowDocumentKeyPersonal({}, {})", server_key_id, array_to_address(&requester[..])),
 			ServiceTask::Shutdown => write!(f, "Shutdown"),
 		}
 	}
@@ -643,7 +647,7 @@ mod tests {
 	fn is_not_processed_by_this_key_server_with_zero_servers() {
 		assert_eq!(is_processed_by_this_key_server(
 			&MapKeyServerSet::default(),
-			Random.generate().unwrap().public(),
+			&Random.generate().unwrap().public().into(),
 			&Default::default()), false);
 	}
 
@@ -652,9 +656,9 @@ mod tests {
 		let self_key_pair = Random.generate().unwrap();
 		assert_eq!(is_processed_by_this_key_server(
 			&MapKeyServerSet::new(false, vec![
-				(self_key_pair.public().clone(), "127.0.0.1:8080".parse().unwrap())
+				(self_key_pair.public().into(), "127.0.0.1:8080".parse().unwrap())
 			].into_iter().collect()),
-			self_key_pair.public(),
+			&self_key_pair.public().into(),
 			&Default::default()), true);
 	}
 
@@ -662,9 +666,9 @@ mod tests {
 	fn is_not_processed_by_this_key_server_when_not_a_part_of_servers_set() {
 		assert!(is_processed_by_this_key_server(
 			&MapKeyServerSet::new(false, vec![
-				(Random.generate().unwrap().public().clone(), "127.0.0.1:8080".parse().unwrap())
+				(Random.generate().unwrap().public().into(), "127.0.0.1:8080".parse().unwrap())
 			].into_iter().collect()),
-			Random.generate().unwrap().public(),
+			&Random.generate().unwrap().public().into(),
 			&Default::default()));
 	}
 
@@ -686,39 +690,39 @@ mod tests {
 		// 1st server: process hashes [0x0; 0x555...555]
 		let key_pair = PlainNodeKeyPair::new(KeyPair::from_secret(
 			"0000000000000000000000000000000000000000000000000000000000000001".parse().unwrap()).unwrap());
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"0000000000000000000000000000000000000000000000000000000000000000".parse().unwrap()), true);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"3000000000000000000000000000000000000000000000000000000000000000".parse().unwrap()), true);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"5555555555555555555555555555555555555555555555555555555555555555".parse().unwrap()), true);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"5555555555555555555555555555555555555555555555555555555555555556".parse().unwrap()), false);
 
 		// 2nd server: process hashes from 0x555...556 to 0xaaa...aab
 		let key_pair = PlainNodeKeyPair::new(KeyPair::from_secret(
 			"0000000000000000000000000000000000000000000000000000000000000002".parse().unwrap()).unwrap());
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"5555555555555555555555555555555555555555555555555555555555555555".parse().unwrap()), false);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"5555555555555555555555555555555555555555555555555555555555555556".parse().unwrap()), true);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"7555555555555555555555555555555555555555555555555555555555555555".parse().unwrap()), true);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab".parse().unwrap()), true);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac".parse().unwrap()), false);
 
 		// 3rd server: process hashes from 0x800...000 to 0xbff...ff
 		let key_pair = PlainNodeKeyPair::new(KeyPair::from_secret(
 			"0000000000000000000000000000000000000000000000000000000000000003".parse().unwrap()).unwrap());
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab".parse().unwrap()), false);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac".parse().unwrap()), true);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"daaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac".parse().unwrap()), true);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".parse().unwrap()), true);
 	}
 
@@ -743,53 +747,53 @@ mod tests {
 		// 1st server: process hashes [0x0; 0x3ff...ff]
 		let key_pair = PlainNodeKeyPair::new(KeyPair::from_secret(
 			"0000000000000000000000000000000000000000000000000000000000000001".parse().unwrap()).unwrap());
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"0000000000000000000000000000000000000000000000000000000000000000".parse().unwrap()), true);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"2000000000000000000000000000000000000000000000000000000000000000".parse().unwrap()), true);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"3fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".parse().unwrap()), true);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"4000000000000000000000000000000000000000000000000000000000000000".parse().unwrap()), false);
 
 		// 2nd server: process hashes from 0x400...000 to 0x7ff...ff
 		let key_pair = PlainNodeKeyPair::new(KeyPair::from_secret(
 			"0000000000000000000000000000000000000000000000000000000000000002".parse().unwrap()).unwrap());
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"3fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".parse().unwrap()), false);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"4000000000000000000000000000000000000000000000000000000000000000".parse().unwrap()), true);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"6000000000000000000000000000000000000000000000000000000000000000".parse().unwrap()), true);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".parse().unwrap()), true);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"8000000000000000000000000000000000000000000000000000000000000000".parse().unwrap()), false);
 
 		// 3rd server: process hashes from 0x800...000 to 0xbff...ff
 		let key_pair = PlainNodeKeyPair::new(KeyPair::from_secret(
 			"0000000000000000000000000000000000000000000000000000000000000004".parse().unwrap()).unwrap());
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".parse().unwrap()), false);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"8000000000000000000000000000000000000000000000000000000000000000".parse().unwrap()), true);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"a000000000000000000000000000000000000000000000000000000000000000".parse().unwrap()), true);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"bfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".parse().unwrap()), true);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"c000000000000000000000000000000000000000000000000000000000000000".parse().unwrap()), false);
 
 		// 4th server: process hashes from 0xc00...000 to 0xfff...ff
 		let key_pair = PlainNodeKeyPair::new(KeyPair::from_secret(
 			"0000000000000000000000000000000000000000000000000000000000000003".parse().unwrap()).unwrap());
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"bfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".parse().unwrap()), false);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"c000000000000000000000000000000000000000000000000000000000000000".parse().unwrap()), true);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"e000000000000000000000000000000000000000000000000000000000000000".parse().unwrap()), true);
-		assert_eq!(is_processed_by_this_key_server(&servers_set, key_pair.public(),
+		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".parse().unwrap()), true);
 	}
 

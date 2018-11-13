@@ -21,7 +21,7 @@ use std::collections::{BTreeMap, HashSet};
 use version::version_data;
 
 use crypto::DEFAULT_MAC;
-use ethkey::{crypto::ecies, Brain, Generator};
+use ethkey::{crypto::ecies, Brain, Generator, Public};
 use ethstore::random_phrase;
 use sync::LightSyncProvider;
 use ethcore::account_provider::AccountProvider;
@@ -240,7 +240,9 @@ impl Parity for ParityClient {
 	}
 
 	fn encrypt_message(&self, key: H512, phrase: Bytes) -> Result<Bytes> {
-		ecies::encrypt(&key.into(), &DEFAULT_MAC, &phrase.0)
+		let pk = Public::from_slice(&key.0[..])
+			.map_err(errors::encryption)?;
+		ecies::encrypt(&pk, &DEFAULT_MAC, &phrase.0)
 			.map_err(errors::encryption)
 			.map(Into::into)
 	}

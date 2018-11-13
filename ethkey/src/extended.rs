@@ -17,7 +17,7 @@
 //! Extended keys
 
 use secret::Secret;
-use Public;
+use ::Public;
 use ethereum_types::H256;
 pub use self::derivation::Error as DerivationError;
 
@@ -135,7 +135,7 @@ impl ExtendedPublic {
 	/// Derive new public key
 	/// Operation is defined only for index belongs [0..2^31)
 	pub fn derive<T>(&self, index: Derivation<T>) -> Result<Self, DerivationError> where T: Label {
-		let (derived_key, next_chain_code) = derivation::public(self.public, self.chain_code, index)?;
+		let (derived_key, next_chain_code) = derivation::public(self.public.clone(), self.chain_code, index)?;
 		Ok(ExtendedPublic::new(derived_key, next_chain_code))
 	}
 
@@ -209,13 +209,14 @@ impl ExtendedKeyPair {
 mod derivation {
 	use parity_crypto::hmac;
 	use parity_crypto::clear_on_drop::clear::Clear;
-	use ethereum_types::{U256, U512, H512, H256};
+	use ethereum_types::{U256, U512, H256};
 	use parity_crypto::secp256k1::Secp256k1;
-	use parity_crypto::traits::asym::{SecretKey, PublicKey as PK, Asym, FiniteField};
+	use parity_crypto::traits::asym::{PublicKey as PK, Asym, FiniteField};
 	use secret::Secret;
 	use keccak;
 	use math::curve_order;
 	use super::{Label, Derivation};
+	use ::Public;
 
 	#[derive(Debug)]
 	pub enum Error {
@@ -241,7 +242,7 @@ mod derivation {
 	/// TODO delet that and move all to crypto crate: it does not even protect memo
 	/// only here to compile
 	fn private_to_h256 (private_key: &Secret) -> H256 {
-		H256::from(&private_key.to_vec()[..])
+		H256::from(private_key.as_ref())
 	}
 
 	fn hmac_pair(data: &[u8], private_key: &Secret, chain_code: H256) -> (H256, H256) {
@@ -304,14 +305,13 @@ mod derivation {
 		md.into()
 	}
 
-	pub fn public<T>(public_key: H512, chain_code: H256, derivation: Derivation<T>) -> Result<(H512, H256), Error> where T: Label {
+	pub fn public<T>(public_key: Public, chain_code: H256, derivation: Derivation<T>) -> Result<(Public, H256), Error> where T: Label {
 		let index = match derivation {
 			Derivation::Soft(index) => index,
 			Derivation::Hard(_) => { return Err(Error::InvalidHardenedUse); }
 		};
 
-		let public_sec = Secp256k1::public_from_slice(&*public_key).map_err(|_| Error::InvalidPoint)?;
-		let public_serialized = PK::to_compressed_vec(&public_sec);
+		let public_serialized = PK::to_compressed_vec(&*public_key);
 
 		let mut data = vec![0u8; 33 + T::len()];
 		// curve point (compressed public key) --  index
@@ -330,17 +330,17 @@ mod derivation {
 		if curve_order() <= new_private.clone().into() { return Err(Error::MissingIndex); }
 		let new_private_sec = Secp256k1::secret_from_slice(&*new_private)
 			.expect("Private key belongs to the field [0..CURVE_ORDER) (checked above); So initializing can never fail; qed");
-		let new_public = Secp256k1::public_from_secret(&new_private_sec)
+		let mut new_public = Secp256k1::public_from_secret(&new_private_sec)
 			.expect("Valid private key produces valid public key");
 
 		// Adding two points on the elliptic curves (combining two public keys)
-		let new_public = Secp256k1::public_add(new_public, &public_sec)
+		Secp256k1::public_add(&mut new_public, &public_key)
 			.expect("Addition of two valid points produce valid point");
 
-		let serialized = new_public.to_vec();
+		let new_public = Public::from_pub(new_public);
 
 		Ok((
-			H512::from(serialized.as_ref()),
+			new_public,
 			new_chain_code,
 		))
 	}
@@ -358,9 +358,9 @@ mod derivation {
 		// 10,000 rounds of sha3 -> that is 100,000
 		let mut running_sha3 = sha3(&buf);
 		for _ in 0..99999 { 
-      running_sha3 = sha3(&*running_sha3); 
-    }
-    println!("{:?}",running_sha3);
+			running_sha3 = sha3(&*running_sha3); 
+		}
+		println!("{:?}",running_sha3);
 		running_sha3
 	}
 
@@ -376,31 +376,30 @@ mod derivation {
 		let mut buf1 = [0;32];
 		let mut buf2 = [0;32];
 
-		buf1.copy_from_slice(&secret.to_vec()[..]);
+		buf1.copy_from_slice(secret.as_ref());
 		// 100,000 rounds of sha3
 		for i in 0..100_000 {
 			if i % 2 == 0 {
 				keccak::Keccak256::keccak256_inplace(&buf1[..], &mut buf2[..]);
-        if i == 0 || i == 2 {
-        }
+				if i == 0 || i == 2 {
+				}
 			} else {
 				keccak::Keccak256::keccak256_inplace(&buf2[..], &mut buf1[..]);
-        if i == 1 {
-        }
+				if i == 1 {
+				}
 	
 			}
 		}
-    println!("{:?}",buf1);
-    println!("{:?}",buf2);
+		println!("{:?}",buf1);
+		println!("{:?}",buf2);
 		Clear::clear(&mut buf2[..]);
 		buf1.into()
 	}
 
-	pub fn point(secret: &Secret) -> Result<H512, Error> {
+	pub fn point(secret: &Secret) -> Result<Public, Error> {
 		let public_sec = Secp256k1::public_from_secret(&secret)
 			.map_err(|_| Error::InvalidPoint)?;
-		let serialized = public_sec.to_vec();
-		Ok(H512::from(serialized.as_ref()))
+		Ok(Public::from_pub(public_sec))
 	}
 
 	pub fn seed_pair(seed: &[u8]) -> (H256, H256) {
@@ -418,8 +417,9 @@ mod derivation {
 mod tests {
 	use super::{ExtendedSecret, ExtendedPublic, ExtendedKeyPair};
 	use secret::Secret;
+	use std::ops::Deref;
 	use std::str::FromStr;
-	use ethereum_types::{H128, H256};
+	use ethereum_types::{H128, H256, H512};
 	use super::{derivation, Derivation};
 	use parity_crypto::secp256k1::Secp256k1;
 	use parity_crypto::traits::asym::{Asym};
@@ -436,7 +436,7 @@ mod tests {
 		let (private_seed, chain_code) = master_chain_basic();
 		let extended_secret = ExtendedSecret::with_code(Secret::from(private_seed.0), chain_code);
 		let derived = f(extended_secret);
-		assert_eq!(derived.as_raw().inner, Secp256k1::secret_from_slice(&test_private[..]).unwrap());
+		assert_eq!(derived.as_raw().deref(), &Secp256k1::secret_from_slice(&test_private[..]).unwrap());
 	}
 
 	#[test]
@@ -456,7 +456,9 @@ mod tests {
 
 		let extended_public = ExtendedPublic::from_secret(&extended_secret).expect("Extended public should be created");
 		let derived_public = extended_public.derive(0.into()).expect("First derivation of public should succeed");
-		assert_eq!(&*derived_public.public(), &"f7b3244c96688f92372bfd4def26dc4151529747bab9f188a4ad34e141d47bd66522ff048bc6f19a0a4429b04318b1a8796c000265b4fa200dae5f6dda92dd94".into());
+		let exp_str = "f7b3244c96688f92372bfd4def26dc4151529747bab9f188a4ad34e141d47bd66522ff048bc6f19a0a4429b04318b1a8796c000265b4fa200dae5f6dda92dd94";
+		let expected = Secp256k1::public_from_slice(&H512::from_str(exp_str).unwrap()[..]).unwrap();
+		assert_eq!(derived_public.public().deref(), &expected);
 
 		let keypair = ExtendedKeyPair::with_secret(
 			Secret::from_str("a100df7a048e50ed308ea696dc600215098141cb391e9527329df289f9383f65").unwrap(),

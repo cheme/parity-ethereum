@@ -87,7 +87,7 @@ impl SessionCreatorCore {
 	/// Create new session creator core.
 	pub fn new(config: &ClusterConfiguration) -> Self {
 		SessionCreatorCore {
-			self_node_id: config.self_key_pair.public().clone(),
+			self_node_id: config.self_key_pair.public().as_ref().into(),
 			acl_storage: config.acl_storage.clone(),
 			key_storage: config.key_storage.clone(),
 			session_counter: AtomicUsize::new(0),

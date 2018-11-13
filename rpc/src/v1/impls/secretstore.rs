@@ -29,7 +29,7 @@ use v1::helpers::secretstore::{generate_document_key, encrypt_document,
 	decrypt_document, decrypt_document_with_shadow, ordered_servers_keccak};
 use v1::traits::SecretStore;
 use v1::types::{H160, H256, H512, Bytes, EncryptedDocumentKey};
-use ethkey::Password;
+use ethkey::{Public, Password};
 
 /// Parity implementation.
 pub struct SecretStoreClient {
@@ -59,9 +59,11 @@ impl SecretStoreClient {
 
 impl SecretStore for SecretStoreClient {
 	fn generate_document_key(&self, address: H160, password: Password, server_key_public: H512) -> Result<EncryptedDocumentKey> {
+		let pk = Public::from_slice(&server_key_public.0[..])
+			.map_err(errors::encryption)?;
 		let account_public = self.accounts.account_public(address.into(), &password)
 			.map_err(|e| errors::account("Could not read account public.", e))?;
-		generate_document_key(account_public, server_key_public.into())
+		generate_document_key(account_public, pk)
 	}
 
 	fn encrypt(&self, address: H160, password: Password, key: Bytes, data: Bytes) -> Result<Bytes> {
@@ -80,7 +82,11 @@ impl SecretStore for SecretStoreClient {
 			shadows.push(self.decrypt_secret(address.clone(), password.clone(), decrypt_shadow)?);
 		}
 
-		decrypt_document_with_shadow(decrypted_secret.into(), common_point.into(), shadows, data.0)
+		let common_point = Public::from_slice(&common_point.0[..])
+			.map_err(errors::encryption)?;
+		let decrypted_secret = Public::from_slice(&decrypted_secret.0[..])
+			.map_err(errors::encryption)?;
+		decrypt_document_with_shadow(decrypted_secret, common_point, shadows, data.0)
 			.map(Into::into)
 	}
 

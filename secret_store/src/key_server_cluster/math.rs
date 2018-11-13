@@ -18,7 +18,6 @@ use ethkey::{Public, Secret, Signature, Random, Generator, math};
 use ethereum_types::{H256, U256};
 use hash::keccak;
 use key_server_cluster::Error;
-use crypto::traits::asym::SecretKey;
 use crypto::clear_on_drop::clear::Clear;
 
 /// Encryption result.
@@ -56,12 +55,12 @@ pub fn generate_random_point() -> Result<Public, Error> {
 
 /// Get X coordinate of point.
 fn public_x(public: &Public) -> H256 {
-	public[0..32].into()
+	public.as_ref()[0..32].into()
 }
 
 /// Get Y coordinate of point.
 fn public_y(public: &Public) -> H256 {
-	public[32..64].into()
+	public.as_ref()[32..64].into()
 }
 
 /// Compute publics sum.
@@ -368,7 +367,7 @@ pub fn combine_message_hash_with_public(message_hash: &H256, public: &Public) ->
 	// buffer is just [message_hash | public.x]
 	let mut buffer = [0; 64];
 	buffer[0..32].copy_from_slice(&message_hash[0..32]);
-	buffer[32..64].copy_from_slice(&public[0..32]);
+	buffer[32..64].copy_from_slice(&public.as_ref()[0..32]);
 
 	// calculate hash of buffer
 	let hash = keccak(&buffer[..]);
@@ -477,8 +476,8 @@ pub fn compute_ecdsa_s(t: usize, signature_s_shares: &[Secret], id_numbers: &[Se
 
 /// Serialize ECDSA signature to [r][s]v form. TODO is it standard, get a fn.
 pub fn serialize_ecdsa_signature(nonce_public: &Public, signature_r: Secret, signature_s: Secret) -> Signature {
-  let mut signature_r = H256::from(&signature_r.to_vec()[..]);
-  let mut signature_s = H256::from(&signature_s.to_vec()[..]);
+  let mut signature_r = H256::from(signature_r.as_ref());
+  let mut signature_s = H256::from(signature_s.as_ref());
 	// compute recovery param
 	let mut signature_v = {
 		let nonce_public_x = public_x(nonce_public);

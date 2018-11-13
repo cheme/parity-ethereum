@@ -22,7 +22,6 @@ use parking_lot::{Mutex, RwLock, Condvar};
 use ethereum_types::H256;
 use ethkey::Secret;
 use crypto::clear_on_drop::clear::Clear;
-use crypto::traits::asym::SecretKey;
 use key_server_cluster::{Error, NodeId, SessionId, Requester};
 use key_server_cluster::cluster::{Cluster, ClusterData, ClusterConfiguration, ClusterView};
 use key_server_cluster::connection_trigger::ServersSetChangeSessionCreatorConnector;
@@ -197,7 +196,7 @@ impl ClusterSessions {
 		let container_state = Arc::new(Mutex::new(ClusterSessionsContainerState::Idle));
 		let creator_core = Arc::new(SessionCreatorCore::new(config));
 		ClusterSessions {
-			self_node_id: config.self_key_pair.public().clone(),
+			self_node_id: config.self_key_pair.public().as_ref().into(),
 			generation_sessions: ClusterSessionsContainer::new(GenerationSessionCreator {
 				core: creator_core.clone(),
 				make_faulty_generation_sessions: AtomicBool::new(false),
@@ -491,8 +490,8 @@ impl Ord for SessionIdWithSubSession {
 		match self.id.cmp(&other.id) {
 			::std::cmp::Ordering::Equal => {
         // inefficient but only for id equal case
-        let mut self_a = H256::from(&self.access_key.to_vec()[..]);
-        let mut oth_a = H256::from(&other.access_key.to_vec()[..]);
+        let mut self_a = H256::from(self.access_key.as_ref());
+        let mut oth_a = H256::from(other.access_key.as_ref());
         let res = self_a.cmp(&oth_a);
         Clear::clear(&mut self_a[..]);
         Clear::clear(&mut oth_a[..]);
@@ -570,7 +569,7 @@ pub fn create_cluster_view(data: &Arc<ClusterData>, requires_all_connections: bo
 	}
 
 	let mut connected_nodes = data.connections.connected_nodes()?;
-	connected_nodes.insert(data.self_key_pair.public().clone());
+	connected_nodes.insert(data.self_key_pair.public().as_ref().into());
 
 	let connected_nodes_count = connected_nodes.len();
 	Ok(Arc::new(ClusterView::new(data.clone(), connected_nodes, connected_nodes_count + disconnected_nodes_count)))
@@ -595,7 +594,7 @@ mod tests {
 			threads: 1,
 			self_key_pair: Arc::new(PlainNodeKeyPair::new(key_pair.clone())),
 			listen_address: ("127.0.0.1".to_owned(), 100_u16),
-			key_server_set: Arc::new(MapKeyServerSet::new(false, vec![(key_pair.public().clone(), format!("127.0.0.1:{}", 100).parse().unwrap())].into_iter().collect())),
+			key_server_set: Arc::new(MapKeyServerSet::new(false, vec![(key_pair.public().into(), format!("127.0.0.1:{}", 100).parse().unwrap())].into_iter().collect())),
 			allow_connecting_to_higher_nodes: false,
 			key_storage: Arc::new(DummyKeyStorage::default()),
 			acl_storage: Arc::new(DummyAclStorage::default()),

@@ -15,19 +15,109 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::fmt;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
+use std::cmp::Ordering;
 use rustc_hex::ToHex;
 use parity_crypto::secp256k1::Secp256k1;
-use parity_crypto::traits::asym::{Asym, SecretKey, FiniteField};
-use ethereum_types::H256;
+use parity_crypto::traits::asym::{Asym, FiniteField};
+use ethereum_types::{H256, H512};
 use Error;
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Secret {
-	pub inner: <Secp256k1 as Asym>::SecretKey,
+	inner: <Secp256k1 as Asym>::SecretKey,
 }
 
+// Note that equal and ord implementation is less efficient than previous FixedHash one (libc
+// call).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Public {
+	inner: <Secp256k1 as Asym>::PublicKey,
+}
+
+lazy_static! {
+	static ref DEFAULT_PUB : Public = Public::from_pub(Secp256k1::public_from_secret(&Secp256k1::zero_key()).expect("only one value"));
+}
+
+/// secret-store compatibility, does not make a lot of sense.
+impl Default for Public {
+	fn default() -> Public {
+		DEFAULT_PUB.clone()
+	}
+}
+
+impl DerefMut for Public {
+	fn deref_mut (&mut self) -> &mut Self::Target {
+		&mut self.inner
+	}
+}
+
+impl PartialOrd<Public> for Public {
+	fn partial_cmp(&self, other: &Public) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl Ord for Public {
+	// there is a more efficient implementation for fixed_hash
+	fn cmp(&self, other: &Self) -> Ordering {
+		self.inner.as_ref().cmp(other.inner.as_ref())
+	}
+}
+
+impl DerefMut for Secret {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		&mut self.inner
+	}
+}
+
+impl Deref for Public {
+	type Target = <Secp256k1 as Asym>::PublicKey;
+	fn deref(&self) -> &Self::Target {
+		&self.inner
+	}
+}
+
+impl Deref for Secret {
+	type Target = <Secp256k1 as Asym>::SecretKey;
+	fn deref(&self) -> &Self::Target {
+		&self.inner
+	}
+}
+
+impl AsRef<[u8]> for Public {
+	fn as_ref(&self) -> &[u8] {
+		self.inner.as_ref()
+	}
+}
+
+impl Into<H512> for Public {
+	fn into(self) -> H512 {
+		self.inner.as_ref().into()
+	}
+}
+
+impl<'a> Into<H512> for &'a Public {
+	fn into(self) -> H512 {
+		self.inner.as_ref().into()
+	}
+}
+
+
+impl AsRef<[u8]> for Secret {
+	fn as_ref(&self) -> &[u8] {
+		self.inner.as_ref()
+	}
+}
+
+/* TODO 
+impl From<<Secp256k1 as Asym>::PublicKey> for Public {
+	fn from(inner: <Secp256k1 as Asym>::PublicKey) -> Self {
+		Public { inner }
+	}
+}
+*/
 // TODO use from
 //impl From<<Secp256k1 as Asym>::SecretKey> for Secret {
 impl Secret {
@@ -36,7 +126,18 @@ impl Secret {
 	}
 }
 
-struct LHex<'a>(&'a[u8]);
+impl Public {
+	pub fn from_pub(inner: <Secp256k1 as Asym>::PublicKey) -> Self {
+		Public { inner }
+	}
+
+	pub fn from_slice(s: &[u8]) -> Result<Self, Error> {
+		Ok(Public { inner: Secp256k1::public_from_slice(s)? })
+	}
+}
+
+struct LHex<'a>(pub &'a[u8]);
+
 impl<'a> std::fmt::LowerHex for LHex<'a> {
 	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
 		if f.alternate() {
@@ -51,28 +152,41 @@ impl<'a> std::fmt::LowerHex for LHex<'a> {
 
 impl ToHex for Secret {
 	fn to_hex(&self) -> String {
-		format!("{:x}", LHex(&self.inner.to_vec()[..]))
+		format!("{:x}", LHex(self.inner.as_ref()))
+	}
+}
+
+impl ToHex for Public {
+	fn to_hex(&self) -> String {
+		format!("{:x}", LHex(self.inner.as_ref()))
 	}
 }
 
 impl fmt::LowerHex for Secret {
 	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-		LHex(&self.inner.to_vec()[..]).fmt(fmt)
+		LHex(self.inner.as_ref()).fmt(fmt)
 	}
 }
 
-impl fmt::Debug for Secret {
+impl fmt::LowerHex for Public {
 	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-		self.inner.fmt(fmt)
+		LHex(self.inner.as_ref()).fmt(fmt)
 	}
 }
 
 impl fmt::Display for Secret {
 	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-		let v = self.inner.to_vec();
+		let v = self.inner.as_ref();
 		write!(fmt, "Secret: 0x{:x}{:x}..{:x}{:x}", v[0], v[1], v[30], v[31])
 	}
 }
+
+impl fmt::Display for Public {
+	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+		write!(fmt, "Public: {}", &self.to_hex())
+	}
+}
+
 
 impl Secret {
 	/// Creates a `Secret` from the given slice, returning `None` if the slice length != 32.
@@ -113,9 +227,9 @@ impl Secret {
 				Ok(())
 			},
 			(false, false) => {
-				let key_secret = self.to_secp256k1_secret()?;
+				let mut key_secret = self.to_secp256k1_secret()?;
 				let other_secret = other.to_secp256k1_secret()?;
-				let key_secret = Secp256k1::secret_add(key_secret, &other_secret)?;
+				Secp256k1::secret_add(&mut key_secret, &other_secret)?;
 
 				*self = Secret::from_sec(key_secret);
 				Ok(())
@@ -132,10 +246,10 @@ impl Secret {
 				self.neg()
 			},
 			(false, false) => {
-				let key_secret = self.to_secp256k1_secret()?;
-				let other_secret = other.to_secp256k1_secret()?;
-				let other_secret = Secp256k1::secret_mul(other_secret, Secp256k1::minus_one_key())?;
-				let key_secret = Secp256k1::secret_add(key_secret, &other_secret)?;
+				let mut key_secret = self.to_secp256k1_secret()?;
+				let mut other_secret = other.to_secp256k1_secret()?;
+				Secp256k1::secret_mul(&mut other_secret, Secp256k1::minus_one_key())?;
+				Secp256k1::secret_add(&mut key_secret, &other_secret)?;
 
 				*self = Secret::from_sec(key_secret);
 				Ok(())
@@ -152,8 +266,8 @@ impl Secret {
 				Ok(())
 			},
 			false => {
-				let key_secret = self.to_secp256k1_secret()?;
-				let key_secret = Secp256k1::secret_add(key_secret, Secp256k1::minus_one_key())?;
+				let mut key_secret = self.to_secp256k1_secret()?;
+				Secp256k1::secret_add(&mut key_secret, Secp256k1::minus_one_key())?;
 
 				*self = Secret::from_sec(key_secret);
 				Ok(())
@@ -170,9 +284,9 @@ impl Secret {
 				Ok(())
 			},
 			(false, false) => {
-				let key_secret = self.to_secp256k1_secret()?;
+				let mut key_secret = self.to_secp256k1_secret()?;
 				let other_secret = other.to_secp256k1_secret()?;
-				let key_secret = Secp256k1::secret_mul(key_secret, &other_secret)?;
+				Secp256k1::secret_mul(&mut key_secret, &other_secret)?;
 
 				*self = Secret::from_sec(key_secret);
 				Ok(())
@@ -185,8 +299,8 @@ impl Secret {
 		match self.is_zero() {
 			true => Ok(()),
 			false => {
-				let key_secret = self.to_secp256k1_secret()?;
-				let key_secret = Secp256k1::secret_mul(key_secret, Secp256k1::minus_one_key())?;
+				let mut key_secret = self.to_secp256k1_secret()?;
+				Secp256k1::secret_mul(&mut key_secret, Secp256k1::minus_one_key())?;
 
 				*self = Secret::from_sec(key_secret);
 				Ok(())
@@ -196,8 +310,8 @@ impl Secret {
 
 	/// Inplace inverse secret key (1 / scalar)
 	pub fn inv(&mut self) -> Result<(), Error> {
-		let key_secret = self.to_secp256k1_secret()?;
-		let key_secret = Secp256k1::secret_inv(key_secret)?;
+		let mut key_secret = self.to_secp256k1_secret()?;
+		Secp256k1::secret_inv(&mut key_secret)?;
 
 		*self = Secret::from_sec(key_secret);
 		Ok(())
@@ -237,6 +351,14 @@ impl FromStr for Secret {
 	}
 }
 
+impl FromStr for Public {
+	type Err = Error;
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		Ok(H512::from_str(s).map_err(|e| Error::Custom(format!("{:?}", e)))?.into())
+	}
+}
+
+
 impl From<[u8; 32]> for Secret {
 	fn from(k: [u8; 32]) -> Self {
 		let s = Secp256k1::secret_from_slice(&k[..]).expect("right size");
@@ -256,13 +378,26 @@ impl From<&'static str> for Secret {
 	}
 }
 
-impl Deref for Secret {
-	type Target = <Secp256k1 as Asym>::SecretKey;
-
-	fn deref(&self) -> &Self::Target {
-		&self.inner
+impl From<[u8; 64]> for Public {
+	fn from(k: [u8; 64]) -> Self {
+		let s = Secp256k1::public_from_slice(&k[..]).expect("right size");
+		Public::from_pub(s)
 	}
 }
+
+impl From<H512> for Public {
+	fn from(s: H512) -> Self {
+		s.0.into()
+	}
+}
+
+impl From<&'static str> for Public {
+	fn from(s: &'static str) -> Self {
+		s.parse().expect(&format!("invalid string literal for {}: '{}'", stringify!(Self), s))
+	}
+}
+
+
 
 #[cfg(test)]
 mod tests {

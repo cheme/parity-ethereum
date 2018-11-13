@@ -31,7 +31,7 @@ use mio::*;
 use mio::deprecated::{EventLoop};
 use mio::tcp::*;
 use mio::udp::*;
-use ethereum_types::H256;
+use ethereum_types::{H256, H512};
 use rlp::{RlpStream, Encodable};
 use rustc_hex::ToHex;
 
@@ -235,8 +235,8 @@ impl HostInfo {
 		self.keys.secret()
 	}
 
-	pub(crate) fn id(&self) -> &NodeId {
-		self.keys.public()
+	pub(crate) fn id(&self) -> NodeId {
+		H512::from(self.keys.public().as_ref())
 	}
 }
 
@@ -399,12 +399,12 @@ impl Host {
 
 	pub fn external_url(&self) -> Option<String> {
 		let info = self.info.read();
-		info.public_endpoint.as_ref().map(|e| format!("{}", Node::new(*info.id(), e.clone())))
+		info.public_endpoint.as_ref().map(|e| format!("{}", Node::new(info.id(), e.clone())))
 	}
 
 	pub fn local_url(&self) -> String {
 		let info = self.info.read();
-		format!("{}", Node::new(*info.id(), info.local_endpoint.clone()))
+		format!("{}", Node::new(info.id(), info.local_endpoint.clone()))
 	}
 
 	pub fn stop(&self, io: &IoContext<NetworkIoMessage>) {
@@ -557,7 +557,7 @@ impl Host {
 			}
 			let config = &info.config;
 
-			(config.min_peers, config.non_reserved_mode == NonReservedPeerMode::Deny, config.max_handshakes as usize, config.ip_filter.clone(), *info.id())
+			(config.min_peers, config.non_reserved_mode == NonReservedPeerMode::Deny, config.max_handshakes as usize, config.ip_filter.clone(), info.id())
 		};
 
 		let (handshake_count, egress_count, ingress_count) = self.session_count();
@@ -739,7 +739,7 @@ impl Host {
 										break;
 									}
 								}
-								(info.config.min_peers as usize, max_peers as usize, info.config.non_reserved_mode == NonReservedPeerMode::Deny, *info.id())
+								(info.config.min_peers as usize, max_peers as usize, info.config.non_reserved_mode == NonReservedPeerMode::Deny, info.id())
 							};
 
 							max_peers = max(max_peers, min_peers);

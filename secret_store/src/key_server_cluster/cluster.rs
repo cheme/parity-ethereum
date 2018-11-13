@@ -205,7 +205,7 @@ pub struct ClusterConnectionsData {
 	/// Is this node isolated from cluster?
 	pub is_isolated: bool,
 	/// Active key servers set.
-	pub nodes: BTreeMap<Public, SocketAddr>,
+	pub nodes: BTreeMap<NodeId, SocketAddr>,
 	/// Active connections to key servers.
 	pub connections: BTreeMap<NodeId, Arc<Connection>>,
 }
@@ -403,7 +403,7 @@ impl ClusterCore {
 
 		// connect to disconnected nodes
 		for (node_id, node_address) in data.connections.disconnected_nodes() {
-			if data.config.allow_connecting_to_higher_nodes || data.self_key_pair.public() < &node_id {
+			if data.config.allow_connecting_to_higher_nodes || &NodeId::from(data.self_key_pair.public().as_ref()) < &node_id {
 				ClusterCore::connect(data.clone(), node_address);
 			}
 		}
@@ -489,7 +489,7 @@ impl ClusterCore {
 				match session.wait() {
 					Ok(Some((version, master))) => match session.take_continue_action() {
 						Some(ContinueAction::Decrypt(session, origin, is_shadow_decryption, is_broadcast_decryption)) => {
-							let initialization_error = if data.self_key_pair.public() == &master {
+							let initialization_error = if &NodeId::from(data.self_key_pair.public().as_ref()) == &master {
 								session.initialize(origin, version, is_shadow_decryption, is_broadcast_decryption)
 							} else {
 								session.delegate(master, origin, version, is_shadow_decryption, is_broadcast_decryption)
@@ -501,7 +501,7 @@ impl ClusterCore {
 							}
 						},
 						Some(ContinueAction::SchnorrSign(session, message_hash)) => {
-							let initialization_error = if data.self_key_pair.public() == &master {
+							let initialization_error = if &NodeId::from(data.self_key_pair.public().as_ref()) == &master {
 								session.initialize(version, message_hash)
 							} else {
 								session.delegate(master, version, message_hash)
@@ -513,7 +513,7 @@ impl ClusterCore {
 							}
 						},
 						Some(ContinueAction::EcdsaSign(session, message_hash)) => {
-							let initialization_error = if data.self_key_pair.public() == &master {
+							let initialization_error = if &NodeId::from(data.self_key_pair.public().as_ref()) == &master {
 								session.initialize(version, message_hash)
 							} else {
 								session.delegate(master, version, message_hash)
@@ -567,7 +567,7 @@ impl ClusterCore {
 			false => sessions.get(&session_id, true).ok_or(Error::NoActiveSessionWithId),
 			true => {
 				let creation_data = SC::creation_data_from_message(&message)?;
-				let master = if is_initialization_message { sender.clone() } else { data.self_key_pair.public().clone() };
+				let master = if is_initialization_message { sender.clone() } else { data.self_key_pair.public().as_ref().into() };
 				let cluster = create_cluster_view(data, requires_all_connections(&message))?;
 
 				sessions.insert(cluster, master, session_id, Some(message.session_nonce().ok_or(Error::InvalidMessage)?), message.is_exclusive_session_message(), creation_data)
@@ -632,7 +632,7 @@ impl ClusterCore {
 						err,
 						message,
 						sender);
-					session.on_session_error(data.self_key_pair.public(), err);
+					session.on_session_error(&data.self_key_pair.public().as_ref().into(), err);
 					sessions.remove(&session_id);
 					return Some(session);
 				},
@@ -663,7 +663,7 @@ impl ClusterCore {
 impl ClusterConnections {
 	pub fn new(config: &ClusterConfiguration) -> Result<Self, Error> {
 		let mut nodes = config.key_server_set.snapshot().current_set;
-		let is_isolated = nodes.remove(config.self_key_pair.public()).is_none();
+		let is_isolated = nodes.remove(&config.self_key_pair.public().as_ref().into()).is_none();
 
 		let trigger: Box<ConnectionTrigger> = match config.auto_migrate_enabled {
 			false => Box::new(SimpleConnectionTrigger::new(config.key_server_set.clone(), config.self_key_pair.clone(), config.admin_public.clone())),
@@ -673,13 +673,13 @@ impl ClusterConnections {
 		let connector = trigger.servers_set_change_creator_connector();
 
 		Ok(ClusterConnections {
-			self_node_id: config.self_key_pair.public().clone(),
+			self_node_id: config.self_key_pair.public().as_ref().into(),
 			key_server_set: config.key_server_set.clone(),
 			trigger: Mutex::new(trigger),
 			connector: connector,
 			data: RwLock::new(ClusterConnectionsData {
-				is_isolated: is_isolated,
-				nodes: nodes,
+				is_isolated,
+				nodes,
 				connections: BTreeMap::new(),
 			}),
 		})
@@ -888,7 +888,7 @@ impl ClusterView {
 impl Cluster for ClusterView {
 	fn broadcast(&self, message: Message) -> Result<(), Error> {
 		let core = self.core.read();
-		for node in core.nodes.iter().filter(|n| *n != core.cluster.self_key_pair.public()) {
+		for node in core.nodes.iter().filter(|n| *n != &NodeId::from(core.cluster.self_key_pair.public().as_ref())) {
 			trace!(target: "secretstore_net", "{}: sent message {} to {}", core.cluster.self_key_pair.public(), message, node);
 			let connection = core.cluster.connection(node).ok_or(Error::NodeDisconnected)?;
 			core.cluster.spawn(connection.send_message(message.clone()).then(|_| Ok(())))
@@ -930,12 +930,12 @@ impl ClusterClientImpl {
 
 	fn create_key_version_negotiation_session(&self, session_id: SessionId) -> Result<Arc<KeyVersionNegotiationSession<KeyVersionNegotiationSessionTransport>>, Error> {
 		let mut connected_nodes = self.data.connections.connected_nodes()?;
-		connected_nodes.insert(self.data.self_key_pair.public().clone());
+		connected_nodes.insert(self.data.self_key_pair.public().as_ref().into());
 
 		let access_key = Random.generate()?.secret().clone();
 		let session_id = SessionIdWithSubSession::new(session_id, access_key);
 		let cluster = create_cluster_view(&self.data, false)?;
-		let session = self.data.sessions.negotiation_sessions.insert(cluster, self.data.self_key_pair.public().clone(), session_id.clone(), None, false, None)?;
+		let session = self.data.sessions.negotiation_sessions.insert(cluster, self.data.self_key_pair.public().as_ref().into(), session_id.clone(), None, false, None)?;
 		match session.initialize(connected_nodes) {
 			Ok(()) => Ok(session),
 			Err(error) => {
@@ -967,10 +967,10 @@ impl ClusterClient for ClusterClientImpl {
 
 	fn new_generation_session(&self, session_id: SessionId, origin: Option<Address>, author: Address, threshold: usize) -> Result<Arc<GenerationSession>, Error> {
 		let mut connected_nodes = self.data.connections.connected_nodes()?;
-		connected_nodes.insert(self.data.self_key_pair.public().clone());
+		connected_nodes.insert(self.data.self_key_pair.public().as_ref().into());
 
 		let cluster = create_cluster_view(&self.data, true)?;
-		let session = self.data.sessions.generation_sessions.insert(cluster, self.data.self_key_pair.public().clone(), session_id, None, false, None)?;
+		let session = self.data.sessions.generation_sessions.insert(cluster, self.data.self_key_pair.public().as_ref().into(), session_id, None, false, None)?;
 		Self::process_initialization_result(
 			session.initialize(origin, author, false, threshold, connected_nodes.into()),
 			session, &self.data.sessions.generation_sessions)
@@ -978,10 +978,10 @@ impl ClusterClient for ClusterClientImpl {
 
 	fn new_encryption_session(&self, session_id: SessionId, requester: Requester, common_point: Public, encrypted_point: Public) -> Result<Arc<EncryptionSession>, Error> {
 		let mut connected_nodes = self.data.connections.connected_nodes()?;
-		connected_nodes.insert(self.data.self_key_pair.public().clone());
+		connected_nodes.insert(self.data.self_key_pair.public().as_ref().into());
 
 		let cluster = create_cluster_view(&self.data, true)?;
-		let session = self.data.sessions.encryption_sessions.insert(cluster, self.data.self_key_pair.public().clone(), session_id, None, false, None)?;
+		let session = self.data.sessions.encryption_sessions.insert(cluster, self.data.self_key_pair.public().as_ref().into(), session_id, None, false, None)?;
 		Self::process_initialization_result(
 			session.initialize(requester, common_point, encrypted_point),
 			session, &self.data.sessions.encryption_sessions)
@@ -989,12 +989,12 @@ impl ClusterClient for ClusterClientImpl {
 
 	fn new_decryption_session(&self, session_id: SessionId, origin: Option<Address>, requester: Requester, version: Option<H256>, is_shadow_decryption: bool, is_broadcast_decryption: bool) -> Result<Arc<DecryptionSession>, Error> {
 		let mut connected_nodes = self.data.connections.connected_nodes()?;
-		connected_nodes.insert(self.data.self_key_pair.public().clone());
+		connected_nodes.insert(self.data.self_key_pair.public().as_ref().into());
 
 		let access_key = Random.generate()?.secret().clone();
 		let session_id = SessionIdWithSubSession::new(session_id, access_key);
 		let cluster = create_cluster_view(&self.data, false)?;
-		let session = self.data.sessions.decryption_sessions.insert(cluster, self.data.self_key_pair.public().clone(),
+		let session = self.data.sessions.decryption_sessions.insert(cluster, self.data.self_key_pair.public().as_ref().into(),
 			session_id.clone(), None, false, Some(requester))?;
 
 		let initialization_result = match version {
@@ -1015,12 +1015,12 @@ impl ClusterClient for ClusterClientImpl {
 
 	fn new_schnorr_signing_session(&self, session_id: SessionId, requester: Requester, version: Option<H256>, message_hash: H256) -> Result<Arc<SchnorrSigningSession>, Error> {
 		let mut connected_nodes = self.data.connections.connected_nodes()?;
-		connected_nodes.insert(self.data.self_key_pair.public().clone());
+		connected_nodes.insert(self.data.self_key_pair.public().as_ref().into());
 
 		let access_key = Random.generate()?.secret().clone();
 		let session_id = SessionIdWithSubSession::new(session_id, access_key);
 		let cluster = create_cluster_view(&self.data, false)?;
-		let session = self.data.sessions.schnorr_signing_sessions.insert(cluster, self.data.self_key_pair.public().clone(), session_id.clone(), None, false, Some(requester))?;
+		let session = self.data.sessions.schnorr_signing_sessions.insert(cluster, self.data.self_key_pair.public().as_ref().into(), session_id.clone(), None, false, Some(requester))?;
 
 		let initialization_result = match version {
 			Some(version) => session.initialize(version, message_hash),
@@ -1040,12 +1040,12 @@ impl ClusterClient for ClusterClientImpl {
 
 	fn new_ecdsa_signing_session(&self, session_id: SessionId, requester: Requester, version: Option<H256>, message_hash: H256) -> Result<Arc<EcdsaSigningSession>, Error> {
 		let mut connected_nodes = self.data.connections.connected_nodes()?;
-		connected_nodes.insert(self.data.self_key_pair.public().clone());
+		connected_nodes.insert(self.data.self_key_pair.public().as_ref().into());
 
 		let access_key = Random.generate()?.secret().clone();
 		let session_id = SessionIdWithSubSession::new(session_id, access_key);
 		let cluster = create_cluster_view(&self.data, false)?;
-		let session = self.data.sessions.ecdsa_signing_sessions.insert(cluster, self.data.self_key_pair.public().clone(), session_id.clone(), None, false, Some(requester))?;
+		let session = self.data.sessions.ecdsa_signing_sessions.insert(cluster, self.data.self_key_pair.public().as_ref().into(), session_id.clone(), None, false, Some(requester))?;
 
 		let initialization_result = match version {
 			Some(version) => session.initialize(version, message_hash),
@@ -1070,7 +1070,7 @@ impl ClusterClient for ClusterClientImpl {
 
 	fn new_servers_set_change_session(&self, session_id: Option<SessionId>, migration_id: Option<H256>, new_nodes_set: BTreeSet<NodeId>, old_set_signature: Signature, new_set_signature: Signature) -> Result<Arc<AdminSession>, Error> {
 		let mut connected_nodes = self.data.connections.connected_nodes()?;
-		connected_nodes.insert(self.data.self_key_pair.public().clone());
+		connected_nodes.insert(self.data.self_key_pair.public().as_ref().into());
 
 		let session_id = match session_id {
 			Some(session_id) if session_id == *SERVERS_SET_CHANGE_SESSION_ID => session_id,
@@ -1080,7 +1080,7 @@ impl ClusterClient for ClusterClientImpl {
 
 		let cluster = create_cluster_view(&self.data, true)?;
 		let creation_data = Some(AdminSessionCreationData::ServersSetChange(migration_id, new_nodes_set.clone()));
-		let session = self.data.sessions.admin_sessions.insert(cluster, self.data.self_key_pair.public().clone(), session_id, None, true, creation_data)?;
+		let session = self.data.sessions.admin_sessions.insert(cluster, self.data.self_key_pair.public().as_ref().into(), session_id, None, true, creation_data)?;
 		let initialization_result = session.as_servers_set_change().expect("servers set change session is created; qed")
 			.initialize(new_nodes_set, old_set_signature, new_set_signature);
 
@@ -1288,7 +1288,7 @@ pub mod tests {
 
 	pub fn all_connections_established(cluster: &Arc<ClusterCore>) -> bool {
 		cluster.config().key_server_set.snapshot().new_set.keys()
-			.filter(|p| *p != cluster.config().self_key_pair.public())
+			.filter(|p| *p != &NodeId::from(cluster.config().self_key_pair.public().as_ref()))
 			.all(|p| cluster.connection(p).is_some())
 	}
 
@@ -1299,7 +1299,7 @@ pub mod tests {
 			self_key_pair: Arc::new(PlainNodeKeyPair::new(key_pairs[i].clone())),
 			listen_address: ("127.0.0.1".to_owned(), ports_begin + i as u16),
 			key_server_set: Arc::new(MapKeyServerSet::new(false, key_pairs.iter().enumerate()
-				.map(|(j, kp)| (kp.public().clone(), format!("127.0.0.1:{}", ports_begin + j as u16).parse().unwrap()))
+				.map(|(j, kp)| (kp.public().into(), format!("127.0.0.1:{}", ports_begin + j as u16).parse().unwrap()))
 				.collect())),
 			allow_connecting_to_higher_nodes: false,
 			key_storage: Arc::new(DummyKeyStorage::default()),

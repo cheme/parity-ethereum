@@ -21,41 +21,34 @@ use ethereum_types::{U256, H256};
 
 /// Whether the public key is valid.
 pub fn public_is_valid(public: &Public) -> bool {
-	to_secp256k1_public(public).ok()
-		.map_or(false, |p| p.is_valid())
+	public.is_valid()
 }
 
 /// Inplace multiply public key by secret key (EC point * scalar)
 pub fn public_mul_secret(public: &mut Public, secret: &Secret) -> Result<(), Error> {
 	let key_secret = secret.to_secp256k1_secret()?;
-	let key_public = to_secp256k1_public(public)?;
-	set_public(public, &Secp256k1::public_mul(key_public, &key_secret)?);
+	Secp256k1::public_mul(public, &key_secret)?;
 	Ok(())
 }
 
 /// Inplace add one public key to another (EC point + EC point)
 pub fn public_add(public: &mut Public, other: &Public) -> Result<(), Error> {
-	let key_public = to_secp256k1_public(public)?;
-	let other_public = to_secp256k1_public(other)?;
-	set_public(public, &Secp256k1::public_add(key_public, &other_public)?);
+	Secp256k1::public_add(public, other)?;
 	Ok(())
 }
 
 /// Inplace sub one public key from another (EC point - EC point)
 pub fn public_sub(public: &mut Public, other: &Public) -> Result<(), Error> {
-	let key_neg_other = to_secp256k1_public(other)?;
-	let key_neg_other = Secp256k1::public_mul(key_neg_other, Secp256k1::minus_one_key())?;
+	let mut key_neg_other = other.clone();
+	Secp256k1::public_mul(&mut key_neg_other, Secp256k1::minus_one_key())?;
 
-	let key_public = to_secp256k1_public(public)?;
-	set_public(public, &Secp256k1::public_add(key_public, &key_neg_other)?);
+	Secp256k1::public_add(public, &key_neg_other)?;
 	Ok(())
 }
 
 /// Replace public key with its negation (EC point = - EC point)
 pub fn public_negate(public: &mut Public) -> Result<(), Error> {
-	let key_public = to_secp256k1_public(public)?;
-	let key_public = Secp256k1::public_mul(key_public, Secp256k1::minus_one_key())?;
-	set_public(public, &key_public);
+	Secp256k1::public_mul(public, Secp256k1::minus_one_key())?;
 	Ok(())
 }
 
@@ -66,25 +59,13 @@ pub fn generation_point() -> Public {
 	public_sec_raw[0..32].copy_from_slice(Secp256k1::generator_x());
 	public_sec_raw[32..64].copy_from_slice(Secp256k1::generator_y());
 
-	let public_key = Secp256k1::public_from_slice(&public_sec_raw)
-		.expect("constructing using predefined constants; qed");
-	let mut public = Public::default();
-	set_public(&mut public, &public_key);
-	public
+	Public::from_pub(Secp256k1::public_from_slice(&public_sec_raw)
+		.expect("constructing using predefined constants; qed"))
 }
 
 /// Return secp256k1 elliptic curve order
 pub fn curve_order() -> U256 {
 	H256::from_slice(Secp256k1::curve_order()).into()
-}
-
-pub fn to_secp256k1_public(public: &Public) -> Result<<Secp256k1 as Asym>::PublicKey, Error> {
-	Ok(Secp256k1::public_from_slice(&public[0..64])?)
-}
-
-fn set_public(public: &mut Public, key_public: &<Secp256k1 as Asym>::PublicKey) {
-	let key_public_serialized = key_public.to_vec();
-	public.copy_from_slice(key_public_serialized.as_ref());
 }
 
 #[cfg(test)]
