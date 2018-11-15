@@ -68,6 +68,7 @@ impl error::Error for Error {
 
 impl Into<String> for Error {
 	fn into(self) -> String {
+    println!("in");
 		format!("{}", self)
 	}
 }

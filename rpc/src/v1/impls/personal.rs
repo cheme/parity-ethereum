@@ -40,6 +40,11 @@ use v1::types::{
 use v1::metadata::Metadata;
 use eip712::{EIP712, hash_structured_data};
 
+
+// TODO see if we can change message
+#[derive(Debug)]
+struct InvalidSignature;
+
 /// Account management (personal) rpc implementation.
 pub struct PersonalClient<D: Dispatcher> {
 	accounts: Arc<AccountProvider>,
@@ -181,6 +186,7 @@ impl<D: Dispatcher + 'static> Personal for PersonalClient<D> {
 
 		let hash = eth_data_hash(data);
 		let account = recover(&signature.into(), &hash)
+			.map_err(|_e|InvalidSignature) // rpc compat
 			.map_err(errors::encryption)
 			.map(|public| {
 				public_to_address(&public).into()

@@ -16,13 +16,8 @@
 
 use super::{Public, Secret, Error};
 use parity_crypto::secp256k1::Secp256k1;
-use parity_crypto::traits::asym::{FiniteField, Asym, PublicKey};
+use parity_crypto::traits::asym::{FiniteField, Asym};
 use ethereum_types::{U256, H256};
-
-/// Whether the public key is valid.
-pub fn public_is_valid(public: &Public) -> bool {
-	public.is_valid()
-}
 
 /// Inplace multiply public key by secret key (EC point * scalar)
 pub fn public_mul_secret(public: &mut Public, secret: &Secret) -> Result<(), Error> {

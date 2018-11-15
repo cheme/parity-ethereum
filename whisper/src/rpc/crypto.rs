@@ -19,7 +19,7 @@
 use crypto::aes_gcm::{Encryptor, Decryptor};
 use ethkey::crypto::ecies;
 use ethereum_types::H256;
-use ethkey::{self, Public, Secret};
+use ethkey::{Public, Secret};
 use crypto::Memzero;
 
 /// Length of AES key
@@ -47,10 +47,6 @@ pub struct EncryptionInstance(EncryptionInner);
 impl EncryptionInstance {
 	/// ECIES encryption using public key. Fails if invalid public key.
 	pub fn ecies(public: Public) -> Result<Self, &'static str> {
-		if !ethkey::public_is_valid(&public) {
-			return Err("Invalid public key");
-		}
-
 		Ok(EncryptionInstance(EncryptionInner::ECIES(public)))
 	}
 
