@@ -715,7 +715,7 @@ impl Configuration {
 		ret.listen_address = Some(format!("{}", listen));
 		ret.public_address = public.map(|p| format!("{}", p));
 		ret.use_secret = match self.args.arg_node_key.as_ref()
-			.map(|s| s.parse::<Secret>().or_else(|_| Secret::from_unsafe_slice(&keccak(s))).map_err(|e| format!("Invalid key: {:?}", e))
+			.map(|s| Secret::from_str(s).or_else(|_| Secret::from_unsafe_slice(&keccak(s))).map_err(|e| format!("Invalid key: {:?}", e))
 			) {
 			None => None,
 			Some(Ok(key)) => Some(key),
@@ -1041,7 +1041,7 @@ impl Configuration {
 
 	fn secretstore_self_secret(&self) -> Result<Option<NodeSecretKey>, String> {
 		match self.args.arg_secretstore_secret {
-			Some(ref s) if s.len() == 64 => Ok(Some(NodeSecretKey::Plain(s.parse()
+			Some(ref s) if s.len() == 64 => Ok(Some(NodeSecretKey::Plain(Secret::from_str(s)
 				.map_err(|e| format!("Invalid secret store secret: {}. Error: {:?}", s, e))?))),
 			Some(ref s) if s.len() == 40 => Ok(Some(NodeSecretKey::KeyStore(s.parse()
 				.map_err(|e| format!("Invalid secret store secret address: {}. Error: {:?}", s, e))?))),
@@ -1052,7 +1052,7 @@ impl Configuration {
 
 	fn secretstore_admin_public(&self) -> Result<Option<Public>, String> {
 		match self.args.arg_secretstore_admin_public.as_ref() {
-			Some(admin_public) => Ok(Some(admin_public.parse().map_err(|e| format!("Invalid secret store admin public: {}", e))?)),
+			Some(admin_public) => Ok(Some(Public::from_str(admin_public).map_err(|e| format!("Invalid secret store admin public: {}", e))?)),
 			None => Ok(None),
 		}
 	}
@@ -1070,7 +1070,7 @@ impl Configuration {
 				return Err(format!("Invalid secret store node: {}", node));
 			}
 
-			let public = public_and_addr[0].parse()
+			let public = Public::from_str(public_and_addr[0])
 				.map_err(|e| format!("Invalid public key in secret store node: {}. Error: {:?}", public_and_addr[0], e))?;
 			let port = ip_and_port[1].parse()
 				.map_err(|e| format!("Invalid port in secret store node: {}. Error: {:?}", ip_and_port[1], e))?;

@@ -174,8 +174,8 @@ mod tests {
 
 	#[test]
 	fn rejects_invalid_secret() {
-		let bad_secret = ::ethkey::Secret::from([0xff; 32]);
-		assert!(Key::from_secret(bad_secret).is_none());
+		let bad_secret = ::ethkey::Secret::from_bytes([0xff; 32]);
+		assert!(bad_secret.is_err());
 	}
 
 	#[test]

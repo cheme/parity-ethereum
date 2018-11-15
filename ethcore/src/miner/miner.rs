@@ -1283,7 +1283,7 @@ impl miner::MinerService for Miner {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use ethkey::{Generator, Random};
+	use ethkey::{Generator, Random, Secret};
 	use hash::keccak;
 	use header::BlockNumber;
 	use rustc_hex::FromHex;
@@ -1521,7 +1521,7 @@ mod tests {
 	fn should_fail_setting_engine_signer_without_account_provider() {
 		let spec = Spec::new_instant;
 		let tap = Arc::new(AccountProvider::transient_provider());
-		let addr = tap.insert_account(keccak("1").into(), &"".into()).unwrap();
+		let addr = tap.insert_account(Secret::from_hash(keccak("1")).unwrap(), &"".into()).unwrap();
 		let client = generate_dummy_client_with_spec_and_accounts(spec, None);
 		assert!(match client.miner().set_author(addr, Some("".into())) { Err(AccountError::NotFound) => true, _ => false });
 	}

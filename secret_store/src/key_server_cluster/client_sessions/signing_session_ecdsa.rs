@@ -1062,7 +1062,7 @@ mod tests {
 	use std::sync::Arc;
 	use std::collections::{BTreeSet, BTreeMap, VecDeque};
 	use ethereum_types::H256;
-	use ethkey::{self, Random, Generator, KeyPair, verify_public, public_to_address};
+	use ethkey::{self, Random, Generator, KeyPair, verify_public, public_to_address, Secret};
 	use acl_storage::DummyAclStorage;
 	use key_server_cluster::{NodeId, DummyKeyStorage, SessionId, SessionMeta, Error, KeyStorage};
 	use key_server_cluster::cluster_sessions::ClusterSession;
@@ -1109,7 +1109,7 @@ mod tests {
 						configured_nodes_count: gl.nodes.len(),
 						connected_nodes_count: gl.nodes.len(),
 					},
-					access_key: "834cb736f02d9c968dfaf0c37658a1d86ff140554fc8b59c9fdad5a8cf810eec".parse().unwrap(),
+					access_key: Secret::from_str("834cb736f02d9c968dfaf0c37658a1d86ff140554fc8b59c9fdad5a8cf810eec").unwrap(),
 					key_share: Some(gl_node.key_storage.get(&session_id).unwrap().unwrap()),
 					acl_storage: acl_storage,
 					cluster: cluster.clone(),

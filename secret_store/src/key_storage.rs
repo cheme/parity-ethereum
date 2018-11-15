@@ -532,9 +532,9 @@ pub mod tests {
 				threshold: 777,
 				id_numbers: vec![(
 					"b486d3840218837b035c66196ecb15e6b067ca20101e11bd5e626288ab6806ecc70b8307012626bd512bad1559112d11d21025cef48cc7a1d2f3976da08f36c8".into(),
-					"281b6bf43cb86d0dc7b98e1b7def4a80f3ce16d28d2308f934f116767306f06c".parse::<Secret>().unwrap().into(),
+					Secret::from_str("281b6bf43cb86d0dc7b98e1b7def4a80f3ce16d28d2308f934f116767306f06c").unwrap().into(),
 				)].into_iter().collect(),
-				secret_share: "00125d85a05e5e63e214cb60fe63f132eec8a103aa29266b7e6e6c5b7597230b".parse::<Secret>().unwrap().into(),
+				secret_share: Secret::from_str("00125d85a05e5e63e214cb60fe63f132eec8a103aa29266b7e6e6c5b7597230b").unwrap().into(),
 				common_point: "99e82b163b062d55a64085bacfd407bb55f194ba5fb7a1af9c34b84435455520f1372e0e650a4f91aed0058cb823f62146ccb5599c8d13372c300dea866b69fc".into(),
 				encrypted_point: "7e05df9dd077ec21ed4bc45c9fe9e0a43d65fa4be540630de615ced5e95cf5c3003035eb713317237d7667feeeb64335525158f5f7411f67aca9645169ea554c".into(),
 			}).unwrap();
@@ -551,15 +551,15 @@ pub mod tests {
 		let key = serde_json::from_slice::<CurrentSerializableDocumentKeyShare>(&db.get(None, &[7]).unwrap().map(|key| key.to_vec()).unwrap()).unwrap();
 		assert_eq!(Address::default(), key.author.clone().into());
 		assert_eq!(777, key.threshold);
-		assert_eq!(Some("99e82b163b062d55a64085bacfd407bb55f194ba5fb7a1af9c34b84435455520f1372e0e650a4f91aed0058cb823f62146ccb5599c8d13372c300dea866b69fc".parse::<Public>().unwrap()), key.common_point.clone().map(|k|Public::from_slice(&k[..]).unwrap()));
-		assert_eq!(Some("7e05df9dd077ec21ed4bc45c9fe9e0a43d65fa4be540630de615ced5e95cf5c3003035eb713317237d7667feeeb64335525158f5f7411f67aca9645169ea554c".parse::<Public>().unwrap()), key.encrypted_point.clone().map(|k|Public::from_slice(&k[..]).unwrap()));
+		assert_eq!(Some(Public::from_str("99e82b163b062d55a64085bacfd407bb55f194ba5fb7a1af9c34b84435455520f1372e0e650a4f91aed0058cb823f62146ccb5599c8d13372c300dea866b69fc").unwrap()), key.common_point.clone().map(|k|Public::from_slice(&k[..]).unwrap()));
+		assert_eq!(Some(Public::from_str("7e05df9dd077ec21ed4bc45c9fe9e0a43d65fa4be540630de615ced5e95cf5c3003035eb713317237d7667feeeb64335525158f5f7411f67aca9645169ea554c").unwrap()), key.encrypted_point.clone().map(|k|Public::from_slice(&k[..]).unwrap()));
 
 		assert_eq!(key.versions.len(), 1);
 		assert_eq!(vec![(
-			"b486d3840218837b035c66196ecb15e6b067ca20101e11bd5e626288ab6806ecc70b8307012626bd512bad1559112d11d21025cef48cc7a1d2f3976da08f36c8".parse::<Public>().unwrap(),
-			"281b6bf43cb86d0dc7b98e1b7def4a80f3ce16d28d2308f934f116767306f06c".parse::<Secret>().unwrap(),
+			Public::from_str("b486d3840218837b035c66196ecb15e6b067ca20101e11bd5e626288ab6806ecc70b8307012626bd512bad1559112d11d21025cef48cc7a1d2f3976da08f36c8").unwrap(),
+			Secret::from_str("281b6bf43cb86d0dc7b98e1b7def4a80f3ce16d28d2308f934f116767306f06c").unwrap().into(),
 		)], key.versions[0].id_numbers.clone().into_iter().map(|(k, v)| (Public::from_slice(&k[..]).unwrap(), v.into())).collect::<Vec<(Public, Secret)>>());
-		assert_eq!("00125d85a05e5e63e214cb60fe63f132eec8a103aa29266b7e6e6c5b7597230b".parse::<Secret>().unwrap(), key.versions[0].secret_share.clone().into());
+		assert_eq!(Secret::from_str("00125d85a05e5e63e214cb60fe63f132eec8a103aa29266b7e6e6c5b7597230b").unwrap(), key.versions[0].secret_share.clone().into());
 	}
 
 	#[test]
@@ -574,9 +574,9 @@ pub mod tests {
 				threshold: 777,
 				id_numbers: vec![(
 					"b486d3840218837b035c66196ecb15e6b067ca20101e11bd5e626288ab6806ecc70b8307012626bd512bad1559112d11d21025cef48cc7a1d2f3976da08f36c8".into(),
-					"281b6bf43cb86d0dc7b98e1b7def4a80f3ce16d28d2308f934f116767306f06c".parse::<Secret>().unwrap().into(),
+					Secret::from_str("281b6bf43cb86d0dc7b98e1b7def4a80f3ce16d28d2308f934f116767306f06c").unwrap().into(),
 				)].into_iter().collect(),
-				secret_share: "00125d85a05e5e63e214cb60fe63f132eec8a103aa29266b7e6e6c5b7597230b".parse::<Secret>().unwrap().into(),
+				secret_share: Secret::from_str("00125d85a05e5e63e214cb60fe63f132eec8a103aa29266b7e6e6c5b7597230b").unwrap().into(),
 				common_point: Some("99e82b163b062d55a64085bacfd407bb55f194ba5fb7a1af9c34b84435455520f1372e0e650a4f91aed0058cb823f62146ccb5599c8d13372c300dea866b69fc".into()),
 				encrypted_point: Some("7e05df9dd077ec21ed4bc45c9fe9e0a43d65fa4be540630de615ced5e95cf5c3003035eb713317237d7667feeeb64335525158f5f7411f67aca9645169ea554c".into()),
 			}).unwrap();
@@ -593,17 +593,17 @@ pub mod tests {
 		assert_eq!(db.get(None, DB_META_KEY_VERSION).unwrap().unwrap()[0], CURRENT_VERSION);
 		let key = serde_json::from_slice::<CurrentSerializableDocumentKeyShare>(&db.get(None, &[7]).unwrap().map(|key| key.to_vec()).unwrap()).unwrap();
 		assert_eq!(777, key.threshold);
-		assert_eq!(Some("99e82b163b062d55a64085bacfd407bb55f194ba5fb7a1af9c34b84435455520f1372e0e650a4f91aed0058cb823f62146ccb5599c8d13372c300dea866b69fc".parse::<Public>().unwrap()), key.common_point.clone().map(|k|Public::from_slice(&k[..]).unwrap()));
-		assert_eq!(Some("7e05df9dd077ec21ed4bc45c9fe9e0a43d65fa4be540630de615ced5e95cf5c3003035eb713317237d7667feeeb64335525158f5f7411f67aca9645169ea554c".parse::<Public>().unwrap()), key.encrypted_point.clone().map(|k|Public::from_slice(&k[..]).unwrap()));
-		assert_eq!(key.author.0, public_to_address(&"b486d3840218837b035c66196ecb15e6b067ca20101e11bd5e626288ab6806ecc70b8307012626bd512bad1559112d11d21025cef48cc7a1d2f3976da08f36c8".into()));
+		assert_eq!(Some(Public::from_str("99e82b163b062d55a64085bacfd407bb55f194ba5fb7a1af9c34b84435455520f1372e0e650a4f91aed0058cb823f62146ccb5599c8d13372c300dea866b69fc").unwrap()), key.common_point.clone().map(|k|Public::from_slice(&k[..]).unwrap()));
+		assert_eq!(Some(Public::from_str("7e05df9dd077ec21ed4bc45c9fe9e0a43d65fa4be540630de615ced5e95cf5c3003035eb713317237d7667feeeb64335525158f5f7411f67aca9645169ea554c").unwrap()), key.encrypted_point.clone().map(|k|Public::from_slice(&k[..]).unwrap()));
+		assert_eq!(key.author.0, public_to_address(&Public::from_str("b486d3840218837b035c66196ecb15e6b067ca20101e11bd5e626288ab6806ecc70b8307012626bd512bad1559112d11d21025cef48cc7a1d2f3976da08f36c8").unwrap()));
 
 		assert_eq!(key.versions.len(), 1);
 		assert_eq!(vec![(
-			"b486d3840218837b035c66196ecb15e6b067ca20101e11bd5e626288ab6806ecc70b8307012626bd512bad1559112d11d21025cef48cc7a1d2f3976da08f36c8".parse::<Public>().unwrap(),
-			"281b6bf43cb86d0dc7b98e1b7def4a80f3ce16d28d2308f934f116767306f06c".parse::<Secret>().unwrap(),
+			Public::from_str("b486d3840218837b035c66196ecb15e6b067ca20101e11bd5e626288ab6806ecc70b8307012626bd512bad1559112d11d21025cef48cc7a1d2f3976da08f36c8").unwrap(),
+			Secret::from_str("281b6bf43cb86d0dc7b98e1b7def4a80f3ce16d28d2308f934f116767306f06c").unwrap(),
 		)], key.versions[0].id_numbers.clone().into_iter().map(|(k, v)| (Public::from_slice(&k[..]).unwrap(), v.into())).collect::<Vec<(Public, Secret)>>());
 
-		assert_eq!("00125d85a05e5e63e214cb60fe63f132eec8a103aa29266b7e6e6c5b7597230b".parse::<Secret>().unwrap(), key.versions[0].secret_share.clone().into());
+		assert_eq!(Secret::from_str("00125d85a05e5e63e214cb60fe63f132eec8a103aa29266b7e6e6c5b7597230b").unwrap(), key.versions[0].secret_share.clone().into());
 	}
 
 	#[test]
@@ -623,9 +623,9 @@ pub mod tests {
 					hash: "281b6bf43cb86d0dc7b98e1b7def4a80f3ce16d28d2308f934f116767306f06c".parse::<H256>().unwrap().into(),
 					id_numbers: vec![(
 						"b486d3840218837b035c66196ecb15e6b067ca20101e11bd5e626288ab6806ecc70b8307012626bd512bad1559112d11d21025cef48cc7a1d2f3976da08f36c8".into(),
-						"281b6bf43cb86d0dc7b98e1b7def4a80f3ce16d28d2308f934f116767306f06c".parse::<Secret>().unwrap().into(),
+						Secret::from_str("281b6bf43cb86d0dc7b98e1b7def4a80f3ce16d28d2308f934f116767306f06c").unwrap().into(),
 					)].into_iter().collect(),
-					secret_share: "00125d85a05e5e63e214cb60fe63f132eec8a103aa29266b7e6e6c5b7597230b".parse::<Secret>().unwrap().into(),
+					secret_share: Secret::from_str("00125d85a05e5e63e214cb60fe63f132eec8a103aa29266b7e6e6c5b7597230b").unwrap().into(),
 				}],
 			}).unwrap();
 			let mut batch = db.transaction();
@@ -641,16 +641,16 @@ pub mod tests {
 		assert_eq!(db.get(None, DB_META_KEY_VERSION).unwrap().unwrap()[0], CURRENT_VERSION);
 		let key = serde_json::from_slice::<CurrentSerializableDocumentKeyShare>(&db.get(None, &[7]).unwrap().map(|key| key.to_vec()).unwrap()).unwrap();
 		assert_eq!(777, key.threshold);
-		assert_eq!(Some("99e82b163b062d55a64085bacfd407bb55f194ba5fb7a1af9c34b84435455520f1372e0e650a4f91aed0058cb823f62146ccb5599c8d13372c300dea866b69fc".parse::<Public>().unwrap()), key.common_point.clone().map(|k|Public::from_slice(&k[..]).unwrap()));
-		assert_eq!(Some("7e05df9dd077ec21ed4bc45c9fe9e0a43d65fa4be540630de615ced5e95cf5c3003035eb713317237d7667feeeb64335525158f5f7411f67aca9645169ea554c".parse::<Public>().unwrap()), key.encrypted_point.clone().map(|k|Public::from_slice(&k[..]).unwrap()));
-		assert_eq!(key.author.0, public_to_address(&"b486d3840218837b035c66196ecb15e6b067ca20101e11bd5e626288ab6806ecc70b8307012626bd512bad1559112d11d21025cef48cc7a1d2f3976da08f36c8".parse().unwrap()));
+		assert_eq!(Some(Public::from_str("99e82b163b062d55a64085bacfd407bb55f194ba5fb7a1af9c34b84435455520f1372e0e650a4f91aed0058cb823f62146ccb5599c8d13372c300dea866b69fc").unwrap()), key.common_point.clone().map(|k|Public::from_slice(&k[..]).unwrap()));
+		assert_eq!(Some(Public::from_str("7e05df9dd077ec21ed4bc45c9fe9e0a43d65fa4be540630de615ced5e95cf5c3003035eb713317237d7667feeeb64335525158f5f7411f67aca9645169ea554c").unwrap()), key.encrypted_point.clone().map(|k|Public::from_slice(&k[..]).unwrap()));
+		assert_eq!(key.author.0, public_to_address(&Public::from_str("b486d3840218837b035c66196ecb15e6b067ca20101e11bd5e626288ab6806ecc70b8307012626bd512bad1559112d11d21025cef48cc7a1d2f3976da08f36c8").unwrap()));
 
 		assert_eq!(key.versions.len(), 1);
 		assert_eq!(vec![(
-			"b486d3840218837b035c66196ecb15e6b067ca20101e11bd5e626288ab6806ecc70b8307012626bd512bad1559112d11d21025cef48cc7a1d2f3976da08f36c8".parse::<Public>().unwrap(),
-			"281b6bf43cb86d0dc7b98e1b7def4a80f3ce16d28d2308f934f116767306f06c".parse::<Secret>().unwrap(),
+			Public::from_str("b486d3840218837b035c66196ecb15e6b067ca20101e11bd5e626288ab6806ecc70b8307012626bd512bad1559112d11d21025cef48cc7a1d2f3976da08f36c8").unwrap(),
+			Secret::from_str("281b6bf43cb86d0dc7b98e1b7def4a80f3ce16d28d2308f934f116767306f06c").unwrap(),
 		)], key.versions[0].id_numbers.clone().into_iter().map(|(k, v)| (Public::from_slice(&k[..]).unwrap(), v.into())).collect::<Vec<(Public, Secret)>>());
 
-		assert_eq!("00125d85a05e5e63e214cb60fe63f132eec8a103aa29266b7e6e6c5b7597230b".parse::<Secret>().unwrap(), key.versions[0].secret_share.clone().into());
+		assert_eq!(Secret::from_str("00125d85a05e5e63e214cb60fe63f132eec8a103aa29266b7e6e6c5b7597230b").unwrap(), key.versions[0].secret_share.clone().into());
 	}
 }

@@ -89,7 +89,6 @@ impl KeyPair {
 
 #[cfg(test)]
 mod tests {
-	use std::str::FromStr;
 	use {KeyPair, Secret};
 
 	#[test]

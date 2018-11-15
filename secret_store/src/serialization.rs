@@ -24,13 +24,17 @@ use ethereum_types::{H160, H256};
 use bytes::Bytes;
 use types::{NodeId, Requester};
 
+
 macro_rules! impl_bytes_deserialize {
-	($name: ident, $value: expr, true) => {
+	($name: ident, $value: expr, from_hex) => {
 		$value[2..].from_hex().map($name).map_err(SerdeError::custom)
 	};
-	($name: ident, $value: expr, false) => {
+	($name: ident, $value: expr, parse) => {
 		$value[2..].parse().map($name).map_err(SerdeError::custom)
-	}
+	};
+	($name: ident, $value: expr, secret) => {
+		Secret::from_str(&$value[2..]).map($name).map_err(SerdeError::custom)
+	};
 }
 
 macro_rules! impl_bytes {
@@ -102,17 +106,17 @@ pub type SerializableMessageHash = SerializableH256;
 pub type SerializableAddress = SerializableH160;
 
 /// Serializable Bytes.
-impl_bytes!(SerializableBytes, Bytes, true, (Default));
+impl_bytes!(SerializableBytes, Bytes, from_hex, (Default));
 /// Serializable H256.
-impl_bytes!(SerializableH256, H256, false, (Default, PartialOrd, Ord));
+impl_bytes!(SerializableH256, H256, parse, (Default, PartialOrd, Ord));
 /// Serializable H160.
-impl_bytes!(SerializableH160, H160, false, (Default));
+impl_bytes!(SerializableH160, H160, parse, (Default));
 /// Serializable H512 (aka Public).
-impl_bytes!(SerializablePublic, NodeId, false, (Default, PartialOrd, Ord));
+impl_bytes!(SerializablePublic, NodeId, parse, (Default, PartialOrd, Ord));
 /// Serializable Secret.
-impl_bytes!(SerializableSecret, Secret, false, ());
+impl_bytes!(SerializableSecret, Secret, secret, ());
 /// Serializable Signature.
-impl_bytes!(SerializableSignature, Signature, false, ());
+impl_bytes!(SerializableSignature, Signature, parse, ());
 
 /// Serializable shadow decryption result.
 #[derive(Clone, Debug, Serialize, Deserialize)]

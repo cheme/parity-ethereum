@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 use crypto::DEFAULT_MAC;
 use ethcore::account_provider::AccountProvider;
-use ethkey::{KeyPair, Signature, verify_public};
+use ethkey::{KeyPair, Signature, verify_public, Secret};
 
 use serde_json;
 use jsonrpc_core::{IoHandler, Success};
@@ -56,7 +56,7 @@ fn rpc_secretstore_encrypt_and_decrypt() {
 	let io = deps.default_client();
 
 	// insert new account
-	let secret = "c1f1cfe279a5c350d13795bce162941967340c8a228e6ba175489afc564a5bef".parse().unwrap();
+	let secret = Secret::from_str("c1f1cfe279a5c350d13795bce162941967340c8a228e6ba175489afc564a5bef").unwrap();
 	deps.accounts.insert_account(secret, &"password".into()).unwrap();
 
 	// execute encryption request
@@ -86,7 +86,7 @@ fn rpc_secretstore_shadow_decrypt() {
 	let io = deps.default_client();
 
 	// insert new account
-	let secret = "82758356bf46b42710d3946a8efa612b7bf5e125e4d49f28facf1139db4a46f4".parse().unwrap();
+	let secret = Secret::from_str("82758356bf46b42710d3946a8efa612b7bf5e125e4d49f28facf1139db4a46f4").unwrap();
 	deps.accounts.insert_account(secret, &"password".into()).unwrap();
 
 	// execute decryption request
@@ -129,7 +129,7 @@ fn rpc_secretstore_sign_raw_hash() {
 	let io = deps.default_client();
 
 	// insert new account
-	let secret = "82758356bf46b42710d3946a8efa612b7bf5e125e4d49f28facf1139db4a46f4".parse().unwrap();
+	let secret = Secret::from_str("82758356bf46b42710d3946a8efa612b7bf5e125e4d49f28facf1139db4a46f4").unwrap();
 	let key_pair = KeyPair::from_secret(secret).unwrap();
 	deps.accounts.insert_account(key_pair.secret().clone(), &"password".into()).unwrap();
 
@@ -152,7 +152,7 @@ fn rpc_secretstore_generate_document_key() {
 	let io = deps.default_client();
 
 	// insert new account
-	let secret = "82758356bf46b42710d3946a8efa612b7bf5e125e4d49f28facf1139db4a46f4".parse().unwrap();
+	let secret = Secret::from_str("82758356bf46b42710d3946a8efa612b7bf5e125e4d49f28facf1139db4a46f4").unwrap();
 	let key_pair = KeyPair::from_secret(secret).unwrap();
 	deps.accounts.insert_account(key_pair.secret().clone(), &"password".into()).unwrap();
 

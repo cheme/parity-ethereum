@@ -1469,7 +1469,7 @@ mod tests {
 	use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 	use hash::keccak;
 	use ethereum_types::{Address, H520, H256, U256};
-	use ethkey::Signature;
+	use ethkey::{Signature, Secret};
 	use header::Header;
 	use rlp::encode;
 	use block::*;
@@ -1512,8 +1512,8 @@ mod tests {
 	#[test]
 	fn generates_seal_and_does_not_double_propose() {
 		let tap = Arc::new(AccountProvider::transient_provider());
-		let addr1 = tap.insert_account(keccak("1").into(), &"1".into()).unwrap();
-		let addr2 = tap.insert_account(keccak("2").into(), &"2".into()).unwrap();
+		let addr1 = tap.insert_account(Secret::from_hash(keccak("1")).unwrap(), &"1".into()).unwrap();
+		let addr2 = tap.insert_account(Secret::from_hash(keccak("2")).unwrap(), &"2".into()).unwrap();
 
 		let spec = Spec::new_test_round();
 		let engine = &*spec.engine;
@@ -1544,8 +1544,8 @@ mod tests {
 	#[test]
 	fn checks_difficulty_in_generate_seal() {
 		let tap = Arc::new(AccountProvider::transient_provider());
-		let addr1 = tap.insert_account(keccak("1").into(), &"1".into()).unwrap();
-		let addr2 = tap.insert_account(keccak("0").into(), &"0".into()).unwrap();
+		let addr1 = tap.insert_account(Secret::from_hash(keccak("1")).unwrap(), &"1".into()).unwrap();
+		let addr2 = tap.insert_account(Secret::from_hash(keccak("0")).unwrap(), &"0".into()).unwrap();
 
 		let spec = Spec::new_test_round();
 		let engine = &*spec.engine;
@@ -1578,7 +1578,7 @@ mod tests {
 	#[test]
 	fn proposer_switching() {
 		let tap = AccountProvider::transient_provider();
-		let addr = tap.insert_account(keccak("0").into(), &"0".into()).unwrap();
+		let addr = tap.insert_account(Secret::from_hash(keccak("0")).unwrap(), &"0".into()).unwrap();
 		let mut parent_header: Header = Header::default();
 		parent_header.set_seal(vec![encode(&0usize)]);
 		parent_header.set_gas_limit("222222".parse::<U256>().unwrap());
@@ -1606,7 +1606,7 @@ mod tests {
 	#[test]
 	fn rejects_future_block() {
 		let tap = AccountProvider::transient_provider();
-		let addr = tap.insert_account(keccak("0").into(), &"0".into()).unwrap();
+		let addr = tap.insert_account(Secret::from_hash(keccak("0")).unwrap(), &"0".into()).unwrap();
 
 		let mut parent_header: Header = Header::default();
 		parent_header.set_seal(vec![encode(&0usize)]);
@@ -1632,7 +1632,7 @@ mod tests {
 	#[test]
 	fn rejects_step_backwards() {
 		let tap = AccountProvider::transient_provider();
-		let addr = tap.insert_account(keccak("0").into(), &"0".into()).unwrap();
+		let addr = tap.insert_account(Secret::from_hash(keccak("0")).unwrap(), &"0".into()).unwrap();
 
 		let mut parent_header: Header = Header::default();
 		parent_header.set_seal(vec![encode(&4usize)]);
@@ -1791,8 +1791,8 @@ mod tests {
 		let spec = Spec::new_test_round_empty_steps();
 		let tap = Arc::new(AccountProvider::transient_provider());
 
-		let addr1 = tap.insert_account(keccak("1").into(), &"1".into()).unwrap();
-		let addr2 = tap.insert_account(keccak("0").into(), &"0".into()).unwrap();
+		let addr1 = tap.insert_account(Secret::from_hash(keccak("1")).unwrap(), &"1".into()).unwrap();
+		let addr2 = tap.insert_account(Secret::from_hash(keccak("0")).unwrap(), &"0".into()).unwrap();
 
 		let accounts = vec![addr1, addr2];
 
@@ -2072,7 +2072,7 @@ mod tests {
 		let spec = Spec::new_test_round_block_reward_contract();
 		let tap = Arc::new(AccountProvider::transient_provider());
 
-		let addr1 = tap.insert_account(keccak("1").into(), &"1".into()).unwrap();
+		let addr1 = tap.insert_account(Secret::from_hash(keccak("1")).unwrap(), &"1".into()).unwrap();
 
 		let engine = &*spec.engine;
 		let genesis_header = spec.genesis_header();

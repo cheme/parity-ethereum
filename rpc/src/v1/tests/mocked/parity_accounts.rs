@@ -20,6 +20,7 @@ use ethcore::account_provider::{AccountProvider, AccountProviderSettings};
 use ethstore::EthStore;
 use ethstore::accounts_dir::RootDiskDirectory;
 use tempdir::TempDir;
+use ethkey::Secret;
 
 use jsonrpc_core::IoHandler;
 use v1::{ParityAccounts, ParityAccountsClient};
@@ -340,7 +341,7 @@ fn derive_key_hash() {
 	let tester = setup();
 	let hash = tester.accounts
 		.insert_account(
-			"0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a".parse().unwrap(),
+			Secret::from_str("0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a").unwrap(),
 			&"password1".into())
 		.expect("account should be inserted ok");
 
@@ -360,7 +361,7 @@ fn derive_key_index() {
 	let tester = setup();
 	let hash = tester.accounts
 		.insert_account(
-			"0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a".parse().unwrap(),
+			Secret::from_str("0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a").unwrap(),
 			&"password1".into())
 		.expect("account should be inserted ok");
 
@@ -424,7 +425,7 @@ fn should_sign_message() {
 	let tester = setup();
 	let hash = tester.accounts
 		.insert_account(
-			"0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a".parse().unwrap(),
+			Secret::from_str("0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a").unwrap(),
 			&"password1".into())
 		.expect("account should be inserted ok");
 

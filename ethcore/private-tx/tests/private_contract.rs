@@ -50,10 +50,10 @@ fn private_contract() {
 	ethcore_logger::init_log();
 	let client = generate_dummy_client(0);
 	let chain_id = client.signing_chain_id();
-	let key1 = KeyPair::from_secret(Secret::from("0000000000000000000000000000000000000000000000000000000000000011")).unwrap();
-	let _key2 = KeyPair::from_secret(Secret::from("0000000000000000000000000000000000000000000000000000000000000012")).unwrap();
-	let key3 = KeyPair::from_secret(Secret::from("0000000000000000000000000000000000000000000000000000000000000013")).unwrap();
-	let key4 = KeyPair::from_secret(Secret::from("0000000000000000000000000000000000000000000000000000000000000014")).unwrap();
+	let key1 = KeyPair::from_secret(Secret::from_str("0000000000000000000000000000000000000000000000000000000000000011").unwrap()).unwrap();
+	let _key2 = KeyPair::from_secret(Secret::from_str("0000000000000000000000000000000000000000000000000000000000000012").unwrap()).unwrap();
+	let key3 = KeyPair::from_secret(Secret::from_str("0000000000000000000000000000000000000000000000000000000000000013").unwrap()).unwrap();
+	let key4 = KeyPair::from_secret(Secret::from_str("0000000000000000000000000000000000000000000000000000000000000014").unwrap()).unwrap();
 	let ap = Arc::new(AccountProvider::transient_provider());
 	ap.insert_account(key1.secret().clone(), &"".into()).unwrap();
 	ap.insert_account(key3.secret().clone(), &"".into()).unwrap();

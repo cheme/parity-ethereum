@@ -211,6 +211,7 @@ impl Engine<EthereumMachine> for BasicAuthority {
 mod tests {
 	use std::sync::Arc;
 	use hash::keccak;
+	use ethkey::Secret;
 	use ethereum_types::H520;
 	use block::*;
 	use test_helpers::get_temp_state_db;
@@ -253,7 +254,7 @@ mod tests {
 	#[test]
 	fn can_generate_seal() {
 		let tap = AccountProvider::transient_provider();
-		let addr = tap.insert_account(keccak("").into(), &"".into()).unwrap();
+		let addr = tap.insert_account(Secret::from_hash(keccak("")).unwrap(), &"".into()).unwrap();
 
 		let spec = new_test_authority();
 		let engine = &*spec.engine;
@@ -271,7 +272,7 @@ mod tests {
 	#[test]
 	fn seals_internally() {
 		let tap = AccountProvider::transient_provider();
-		let authority = tap.insert_account(keccak("").into(), &"".into()).unwrap();
+		let authority = tap.insert_account(Secret::from_hash(keccak("")).unwrap(), &"".into()).unwrap();
 
 		let engine = new_test_authority().engine;
 		assert!(!engine.seals_internally().unwrap());

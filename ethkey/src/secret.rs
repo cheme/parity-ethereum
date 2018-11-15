@@ -16,7 +16,6 @@
 
 use std::fmt;
 use std::ops::{Deref, DerefMut};
-use std::str::FromStr;
 use std::cmp::Ordering;
 use rustc_hex::ToHex;
 use parity_crypto::secp256k1::Secp256k1;
@@ -103,6 +102,20 @@ impl Secret {
 	pub fn from_sec(inner: <Secp256k1 as Asym>::SecretKey) -> Self {
 		Secret { inner }
 	}
+
+	pub fn from_bytes(k: [u8; 32]) -> Result<Self, Error> {
+		let s = Secp256k1::secret_from_slice(&k[..])?;
+		Ok(Secret::from_sec(s))
+	}
+
+	pub fn from_hash(k: H256) -> Result<Self, Error> {
+		Self::from_bytes(k.0)
+	}
+
+	pub fn from_str(s: &str) -> Result<Self, Error> {
+		let hash : H256 = s.parse().map_err(|e| Error::Custom(format!("{:?}", e)))?;
+		Self::from_hash(hash)
+	}
 }
 
 impl Public {
@@ -113,6 +126,21 @@ impl Public {
 	pub fn from_slice(s: &[u8]) -> Result<Self, Error> {
 		Ok(Public { inner: Secp256k1::public_from_slice(s)? })
 	}
+
+	pub fn from_bytes(k: [u8; 64]) -> Result<Self, Error> {
+		let s = Secp256k1::public_from_slice(&k[..])?;
+		Ok(Self::from_pub(s))
+	}
+
+	pub fn from_hash(k: H512) -> Result<Self, Error> {
+		Self::from_bytes(k.0)
+	}
+
+	pub fn from_str(s: &str) -> Result<Self, Error> {
+		let hash : H512 = s.parse().map_err(|e| Error::Custom(format!("{:?}", e)))?;
+		Self::from_hash(hash)
+	}
+
 }
 
 struct LHex<'a>(pub &'a[u8]);
@@ -324,64 +352,8 @@ impl Secret {
 	}
 }
 
-impl FromStr for Secret {
-	type Err = Error;
-	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		Ok(H256::from_str(s).map_err(|e| Error::Custom(format!("{:?}", e)))?.into())
-	}
-}
-
-impl FromStr for Public {
-	type Err = Error;
-	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		Ok(H512::from_str(s).map_err(|e| Error::Custom(format!("{:?}", e)))?.into())
-	}
-}
-
-
-impl From<[u8; 32]> for Secret {
-	fn from(k: [u8; 32]) -> Self {
-		let s = Secp256k1::secret_from_slice(&k[..]).expect("right size");
-		Secret::from_sec(s)
-	}
-}
-
-impl From<H256> for Secret {
-	fn from(s: H256) -> Self {
-		s.0.into()
-	}
-}
-
-impl From<&'static str> for Secret {
-	fn from(s: &'static str) -> Self {
-		s.parse().expect(&format!("invalid string literal for {}: '{}'", stringify!(Self), s))
-	}
-}
-
-impl From<[u8; 64]> for Public {
-	fn from(k: [u8; 64]) -> Self {
-		let s = Secp256k1::public_from_slice(&k[..]).expect("right size");
-		Public::from_pub(s)
-	}
-}
-
-impl From<H512> for Public {
-	fn from(s: H512) -> Self {
-		s.0.into()
-	}
-}
-
-impl From<&'static str> for Public {
-	fn from(s: &'static str) -> Self {
-		s.parse().expect(&format!("invalid string literal for {}: '{}'", stringify!(Self), s))
-	}
-}
-
-
-
 #[cfg(test)]
 mod tests {
-	use std::str::FromStr;
 	use super::super::{Random, Generator};
 	use super::Secret;
 

@@ -165,9 +165,9 @@ mod tests {
 	#[test]
 	fn uses_current_set() {
 		let tap = Arc::new(AccountProvider::transient_provider());
-		let s0: Secret = keccak("0").into();
+		let s0: Secret = Secret::from_hash(keccak("0")).unwrap();
 		let v0 = tap.insert_account(s0.clone(), &"".into()).unwrap();
-		let v1 = tap.insert_account(keccak("1").into(), &"".into()).unwrap();
+		let v1 = tap.insert_account(Secret::from_hash(keccak("1")).unwrap(), &"".into()).unwrap();
 		let client = generate_dummy_client_with_spec_and_accounts(Spec::new_validator_multi, Some(tap));
 		client.engine().register_client(Arc::downgrade(&client) as _);
 

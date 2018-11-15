@@ -1265,7 +1265,7 @@ mod tests {
 	use evm::CallType;
 
 	fn secret() -> Secret {
-		keccak("").into()
+		Secret::from_hash(keccak("")).unwrap()
 	}
 
 	fn make_frontier_machine(max_depth: usize) -> EthereumMachine {

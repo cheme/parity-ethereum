@@ -586,7 +586,7 @@ fn is_processed_by_this_key_server(key_server_set: &KeyServerSet, node: &NodeId,
 mod tests {
 	use std::sync::Arc;
 	use std::sync::atomic::Ordering;
-	use ethkey::{Random, Generator, KeyPair};
+	use ethkey::{Random, Generator, KeyPair, Secret};
 	use listener::service_contract::ServiceContract;
 	use listener::service_contract::tests::DummyServiceContract;
 	use key_server_cluster::DummyClusterClient;
@@ -601,8 +601,8 @@ mod tests {
 	fn create_non_empty_key_storage(has_doc_key: bool) -> Arc<DummyKeyStorage> {
 		let key_storage = Arc::new(DummyKeyStorage::default());
 		let mut key_share = DocumentKeyShare::default();
-		key_share.public = KeyPair::from_secret("0000000000000000000000000000000000000000000000000000000000000001"
-			.parse().unwrap()).unwrap().public().clone().into();
+		key_share.public = KeyPair::from_secret(Secret::from_str("0000000000000000000000000000000000000000000000000000000000000001")
+			.unwrap()).unwrap().public().clone().into();
 		if has_doc_key {
 			key_share.common_point = Some(Default::default());
 			key_share.encrypted_point = Some(Default::default());
@@ -628,7 +628,7 @@ mod tests {
 		let key_storage = key_storage.unwrap_or_else(|| Arc::new(DummyKeyStorage::default()));
 		let acl_storage = acl_storage.unwrap_or_else(|| Arc::new(DummyAclStorage::default()));
 		let servers_set = servers_set.unwrap_or_else(|| make_servers_set(false));
-		let self_key_pair = Arc::new(PlainNodeKeyPair::new(KeyPair::from_secret("0000000000000000000000000000000000000000000000000000000000000001".parse().unwrap()).unwrap()));
+		let self_key_pair = Arc::new(PlainNodeKeyPair::new(KeyPair::from_secret(Secret::from_str("0000000000000000000000000000000000000000000000000000000000000001").unwrap()).unwrap()));
 		ServiceContractListener::new(ServiceContractListenerParams {
 			contract: contract,
 			self_key_pair: self_key_pair,
@@ -684,8 +684,8 @@ mod tests {
 		].into_iter().collect());
 
 		// 1st server: process hashes [0x0; 0x555...555]
-		let key_pair = PlainNodeKeyPair::new(KeyPair::from_secret(
-			"0000000000000000000000000000000000000000000000000000000000000001".parse().unwrap()).unwrap());
+		let key_pair = PlainNodeKeyPair::new(KeyPair::from_secret(Secret::from_str(
+			"0000000000000000000000000000000000000000000000000000000000000001").unwrap()).unwrap());
 		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"0000000000000000000000000000000000000000000000000000000000000000".parse().unwrap()), true);
 		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
@@ -696,8 +696,8 @@ mod tests {
 			&"5555555555555555555555555555555555555555555555555555555555555556".parse().unwrap()), false);
 
 		// 2nd server: process hashes from 0x555...556 to 0xaaa...aab
-		let key_pair = PlainNodeKeyPair::new(KeyPair::from_secret(
-			"0000000000000000000000000000000000000000000000000000000000000002".parse().unwrap()).unwrap());
+		let key_pair = PlainNodeKeyPair::new(KeyPair::from_secret(Secret::from_str(
+			"0000000000000000000000000000000000000000000000000000000000000002").unwrap()).unwrap());
 		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"5555555555555555555555555555555555555555555555555555555555555555".parse().unwrap()), false);
 		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
@@ -710,8 +710,8 @@ mod tests {
 			&"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac".parse().unwrap()), false);
 
 		// 3rd server: process hashes from 0x800...000 to 0xbff...ff
-		let key_pair = PlainNodeKeyPair::new(KeyPair::from_secret(
-			"0000000000000000000000000000000000000000000000000000000000000003".parse().unwrap()).unwrap());
+		let key_pair = PlainNodeKeyPair::new(KeyPair::from_secret(Secret::from_str(
+			"0000000000000000000000000000000000000000000000000000000000000003").unwrap()).unwrap());
 		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab".parse().unwrap()), false);
 		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
@@ -741,8 +741,8 @@ mod tests {
 		].into_iter().collect());
 
 		// 1st server: process hashes [0x0; 0x3ff...ff]
-		let key_pair = PlainNodeKeyPair::new(KeyPair::from_secret(
-			"0000000000000000000000000000000000000000000000000000000000000001".parse().unwrap()).unwrap());
+		let key_pair = PlainNodeKeyPair::new(KeyPair::from_secret(Secret::from_str(
+			"0000000000000000000000000000000000000000000000000000000000000001").unwrap()).unwrap());
 		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"0000000000000000000000000000000000000000000000000000000000000000".parse().unwrap()), true);
 		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
@@ -753,8 +753,8 @@ mod tests {
 			&"4000000000000000000000000000000000000000000000000000000000000000".parse().unwrap()), false);
 
 		// 2nd server: process hashes from 0x400...000 to 0x7ff...ff
-		let key_pair = PlainNodeKeyPair::new(KeyPair::from_secret(
-			"0000000000000000000000000000000000000000000000000000000000000002".parse().unwrap()).unwrap());
+		let key_pair = PlainNodeKeyPair::new(KeyPair::from_secret(Secret::from_str(
+			"0000000000000000000000000000000000000000000000000000000000000002").unwrap()).unwrap());
 		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"3fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".parse().unwrap()), false);
 		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
@@ -767,8 +767,8 @@ mod tests {
 			&"8000000000000000000000000000000000000000000000000000000000000000".parse().unwrap()), false);
 
 		// 3rd server: process hashes from 0x800...000 to 0xbff...ff
-		let key_pair = PlainNodeKeyPair::new(KeyPair::from_secret(
-			"0000000000000000000000000000000000000000000000000000000000000004".parse().unwrap()).unwrap());
+		let key_pair = PlainNodeKeyPair::new(KeyPair::from_secret(Secret::from_str(
+			"0000000000000000000000000000000000000000000000000000000000000004").unwrap()).unwrap());
 		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".parse().unwrap()), false);
 		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
@@ -781,8 +781,8 @@ mod tests {
 			&"c000000000000000000000000000000000000000000000000000000000000000".parse().unwrap()), false);
 
 		// 4th server: process hashes from 0xc00...000 to 0xfff...ff
-		let key_pair = PlainNodeKeyPair::new(KeyPair::from_secret(
-			"0000000000000000000000000000000000000000000000000000000000000003".parse().unwrap()).unwrap());
+		let key_pair = PlainNodeKeyPair::new(KeyPair::from_secret(Secret::from_str(
+			"0000000000000000000000000000000000000000000000000000000000000003").unwrap()).unwrap());
 		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
 			&"bfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".parse().unwrap()), false);
 		assert_eq!(is_processed_by_this_key_server(&servers_set, &key_pair.public().into(),
@@ -892,7 +892,7 @@ mod tests {
 		ServiceContractListener::process_service_task(&listener.data, ServiceTask::RetrieveServerKey(
 			Default::default(), Default::default())).unwrap();
 		assert_eq!(*contract.retrieved_server_keys.lock(), vec![(Default::default(),
-			KeyPair::from_secret("0000000000000000000000000000000000000000000000000000000000000001".parse().unwrap()).unwrap().public().into(), 0)]);
+			KeyPair::from_secret(Secret::from_str("0000000000000000000000000000000000000000000000000000000000000001").unwrap()).unwrap().public().into(), 0)]);
 	}
 
 	#[test]

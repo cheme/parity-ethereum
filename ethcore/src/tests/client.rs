@@ -32,7 +32,7 @@ use ethereum_types::{U256, Address};
 use miner::{Miner, PendingOrdering};
 use spec::Spec;
 use views::BlockView;
-use ethkey::KeyPair;
+use ethkey::{KeyPair, Secret};
 use transaction::{PendingTransaction, Transaction, Action, Condition};
 use miner::MinerService;
 use tempdir::TempDir;
@@ -294,7 +294,7 @@ fn change_history_size() {
 
 #[test]
 fn does_not_propagate_delayed_transactions() {
-	let key = KeyPair::from_secret(keccak("test").into()).unwrap();
+	let key = KeyPair::from_secret(Secret::from_hash(keccak("test")).unwrap()).unwrap();
 	let secret = key.secret();
 	let tx0 = PendingTransaction::new(Transaction {
 		nonce: 0.into(),

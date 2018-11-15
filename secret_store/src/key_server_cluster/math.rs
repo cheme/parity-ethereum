@@ -40,7 +40,7 @@ pub fn zero_scalar() -> Secret {
 pub fn to_scalar(hash: H256) -> Result<Secret, Error> {
 	let scalar: U256 = hash.into();
 	let scalar: H256 = (scalar % math::curve_order()).into();
-	let scalar = Secret::from(scalar.0);
+	let scalar = Secret::from_bytes(scalar.0)?;
 	scalar.check_validity()?;
 	Ok(scalar)
 }

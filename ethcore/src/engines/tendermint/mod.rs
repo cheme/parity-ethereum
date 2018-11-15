@@ -785,6 +785,7 @@ mod tests {
 	use rustc_hex::FromHex;
 	use ethereum_types::Address;
 	use bytes::Bytes;
+	use ethkey::Secret;
 	use block::*;
 	use error::{Error, ErrorKind, BlockError};
 	use header::Header;
@@ -840,7 +841,7 @@ mod tests {
 	}
 
 	fn insert_and_unlock(tap: &Arc<AccountProvider>, acc: &str) -> Address {
-		let addr = tap.insert_account(keccak(acc).into(), &acc.into()).unwrap();
+		let addr = tap.insert_account(Secret::from_hash(keccak(acc)).unwrap(), &acc.into()).unwrap();
 		tap.unlock_account_permanently(addr, acc.into()).unwrap();
 		addr
 	}

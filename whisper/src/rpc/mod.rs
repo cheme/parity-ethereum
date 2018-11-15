@@ -30,6 +30,7 @@ use jsonrpc_macros::pubsub;
 use ethereum_types::H256;
 use crypto::Memzero;
 use parking_lot::RwLock;
+use ethkey::Secret;
 
 use self::filter::Filter;
 use self::key_store::{Key, KeyStore};
@@ -225,7 +226,7 @@ impl<P: PoolHandle + 'static, M: Send + Sync + 'static> Whisper for WhisperClien
 	}
 
 	fn add_private_key(&self, private: types::Private) -> Result<types::Identity, Error> {
-		let key_pair = Key::from_secret(private.into_inner().into())
+		let key_pair = Secret::from_hash(private.into_inner()).ok().and_then(Key::from_secret)
 			.ok_or_else(|| whisper_error("Invalid private key"))?;
 
 		Ok(HexEncode(self.store.write().insert(key_pair)))

@@ -1649,7 +1649,7 @@ mod tests {
 	}
 
 	fn secret() -> Secret {
-		keccak("").into()
+		Secret::from_hash(keccak("")).unwrap()
 	}
 
 	#[test]

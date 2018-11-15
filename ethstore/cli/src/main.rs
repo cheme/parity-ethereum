@@ -32,7 +32,7 @@ use std::{env, process, fs, fmt};
 
 use docopt::Docopt;
 use ethstore::accounts_dir::{KeyDirectory, RootDiskDirectory};
-use ethstore::ethkey::{Address, Password};
+use ethstore::ethkey::{Address, Password, Secret};
 use ethstore::{EthStore, SimpleSecretStore, SecretStore, import_accounts, PresaleWallet, SecretVaultRef, StoreAccountRef};
 
 mod crack;
@@ -217,7 +217,7 @@ fn execute<S, I>(command: I) -> Result<String, Error> where I: IntoIterator<Item
 	let store = EthStore::open(key_dir(&args.flag_dir)?)?;
 
 	return if args.cmd_insert {
-		let secret = args.arg_secret.parse().map_err(|_| ethstore::Error::InvalidSecret)?;
+		let secret = Secret::from_str(&args.arg_secret).map_err(|_| ethstore::Error::InvalidSecret)?;
 		let password = load_password(&args.arg_password)?;
 		let vault_ref = open_args_vault(&store, &args)?;
 		let account_ref = store.insert_account(vault_ref, secret, &password)?;

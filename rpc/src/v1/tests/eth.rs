@@ -34,6 +34,7 @@ use io::IoChannel;
 use miner::external::ExternalMiner;
 use parking_lot::Mutex;
 use parity_runtime::Runtime;
+use ethkey::Secret;
 
 use jsonrpc_core::IoHandler;
 use v1::helpers::dispatch::FullDispatcher;
@@ -334,7 +335,7 @@ const POSITIVE_NONCE_SPEC: &'static [u8] = br#"{
 
 #[test]
 fn eth_transaction_count() {
-	let secret = "8a283037bb19c4fed7b1c569e40c7dcff366165eb869110a1b11532963eb9cb2".parse().unwrap();
+	let secret = Secret::from_str("8a283037bb19c4fed7b1c569e40c7dcff366165eb869110a1b11532963eb9cb2").unwrap();
 	let tester = EthTester::from_spec(Spec::load(&env::temp_dir(), TRANSACTION_COUNT_SPEC).expect("invalid chain spec"));
 	let address = tester.accounts.insert_account(secret, &"".into()).unwrap();
 	tester.accounts.unlock_account_permanently(address, "".into()).unwrap();

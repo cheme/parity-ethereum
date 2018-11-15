@@ -1254,9 +1254,10 @@ fn load_key(path: &Path) -> Option<Secret> {
 #[test]
 fn key_save_load() {
 	use tempdir::TempDir;
+	use ethkey::Secret;
 
 	let tempdir = TempDir::new("").unwrap();
-	let key = H256::random().into();
+	let key = Secret::from_hash(H256::random()).unwrap();
 	save_key(tempdir.path(), &key);
 	let r = load_key(tempdir.path());
 	assert_eq!(key, r.unwrap());
@@ -1265,7 +1266,7 @@ fn key_save_load() {
 #[test]
 fn host_client_url() {
 	let mut config = NetworkConfiguration::new_local();
-	let key = "6f7b0d801bc7b5ce7bbd930b84fd0369b3eb25d09be58d64ba811091046f3aa2".parse().unwrap();
+	let key = Secret::from_str("6f7b0d801bc7b5ce7bbd930b84fd0369b3eb25d09be58d64ba811091046f3aa2").unwrap();
 	config.use_secret = Some(key);
 	let host: Host = Host::new(config, None).unwrap();
 	assert!(host.local_url().starts_with("enode://101b3ef5a4ea7a1c7928e24c4c75fd053c235d7b80c22ae5c03d145d0ac7396e2a4ffff9adee3133a7b05044a5cee08115fd65145e5165d646bde371010d803c@"));

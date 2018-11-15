@@ -809,7 +809,6 @@ impl JobTransport for SigningJobTransport {
 mod tests {
 	use crypto::traits::asym::PublicKey;
 	use std::sync::Arc;
-	use std::str::FromStr;
 	use std::collections::{BTreeSet, BTreeMap, VecDeque};
 	use ethereum_types::{Address, H256};
 	use ethkey::{self, Random, Generator, Public, Secret, KeyPair, public_to_address};
@@ -862,7 +861,7 @@ mod tests {
 						configured_nodes_count: gl.nodes.len(),
 						connected_nodes_count: gl.nodes.len(),
 					},
-					access_key: "834cb736f02d9c968dfaf0c37658a1d86ff140554fc8b59c9fdad5a8cf810eec".parse().unwrap(),
+					access_key: Secret::from_str("834cb736f02d9c968dfaf0c37658a1d86ff140554fc8b59c9fdad5a8cf810eec").unwrap(),
 					key_share: Some(gl_node.key_storage.get(&session_id).unwrap().unwrap()),
 					acl_storage: acl_storage,
 					cluster: cluster.clone(),

@@ -159,6 +159,7 @@ fn encrypt_secret(secret: &Public, joint_public: &Public) -> Result<(Public, Pub
 #[cfg(test)]
 mod tests {
 	use bytes::Bytes;
+	use ethkey::{Public, Secret};
 	use rustc_hex::FromHex;
 	use super::{encrypt_document, decrypt_document, decrypt_document_with_shadow};
 
@@ -178,9 +179,9 @@ mod tests {
 	fn encrypt_and_shadow_decrypt_document() {
 		let document: Bytes = "deadbeef".from_hex().unwrap();
 		let encrypted_document = "2ddec1f96229efa2916988d8b2a82a47ef36f71c".from_hex().unwrap();
-		let decrypted_secret = "843645726384530ffb0c52f175278143b5a93959af7864460f5a4fec9afd1450cfb8aef63dec90657f43f55b13e0a73c7524d4e9a13c051b4e5f1e53f39ecd91".parse().unwrap();
-		let common_point = "07230e34ebfe41337d3ed53b186b3861751f2401ee74b988bba55694e2a6f60c757677e194be2e53c3523cc8548694e636e6acb35c4e8fdc5e29d28679b9b2f3".parse().unwrap();
-		let shadows = vec!["46f542416216f66a7d7881f5a283d2a1ab7a87b381cbc5f29d0b093c7c89ee31".parse().unwrap()];
+		let decrypted_secret = Public::from_str("843645726384530ffb0c52f175278143b5a93959af7864460f5a4fec9afd1450cfb8aef63dec90657f43f55b13e0a73c7524d4e9a13c051b4e5f1e53f39ecd91").unwrap();
+		let common_point = Public::from_str("07230e34ebfe41337d3ed53b186b3861751f2401ee74b988bba55694e2a6f60c757677e194be2e53c3523cc8548694e636e6acb35c4e8fdc5e29d28679b9b2f3").unwrap();
+		let shadows = vec![Secret::from_str("46f542416216f66a7d7881f5a283d2a1ab7a87b381cbc5f29d0b093c7c89ee31").unwrap()];
 		let decrypted_document = decrypt_document_with_shadow(decrypted_secret, common_point, shadows, encrypted_document).unwrap();
 		assert_eq!(decrypted_document, document);
 	}
