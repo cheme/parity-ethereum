@@ -217,6 +217,7 @@ mod derivation {
 	use math::curve_order;
 	use super::{Label, Derivation};
 	use ::Public;
+	use parity_crypto::traits::asym::SecretKey;
 
 	#[derive(Debug)]
 	pub enum Error {
@@ -242,7 +243,7 @@ mod derivation {
 	/// TODO delet that and move all to crypto crate: it does not even protect memo
 	/// only here to compile
 	fn private_to_h256 (private_key: &Secret) -> H256 {
-		H256::from(private_key.as_ref())
+		H256::from(AsRef::<[u8]>::as_ref(&(*private_key).to_vec()))
 	}
 
 	fn hmac_pair(data: &[u8], private_key: &Secret, chain_code: H256) -> (H256, H256) {
@@ -376,7 +377,7 @@ mod derivation {
 		let mut buf1 = [0;32];
 		let mut buf2 = [0;32];
 
-		buf1.copy_from_slice(secret.as_ref());
+		buf1.copy_from_slice((*secret).to_vec().as_ref());
 		// 100,000 rounds of sha3
 		for i in 0..100_000 {
 			if i % 2 == 0 {

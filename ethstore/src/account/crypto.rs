@@ -21,6 +21,7 @@ use crypto::Keccak256;
 use random::Random;
 use smallvec::SmallVec;
 use account::{Cipher, Kdf, Aes128Ctr, Pbkdf2, Prf};
+use crypto::traits::asym::SecretKey;
 
 /// Encrypted data
 #[derive(Debug, PartialEq, Clone)]
@@ -74,7 +75,7 @@ impl From<Crypto> for String {
 impl Crypto {
 	/// Encrypt account secret
 	pub fn with_secret(secret: &Secret, password: &Password, iterations: u32) -> Result<Self, crypto::Error> {
-		Crypto::with_plain(secret.as_ref(), password, iterations)
+		Crypto::with_plain(secret.to_vec().as_ref(), password, iterations)
 	}
 
 	/// Encrypt custom plain data

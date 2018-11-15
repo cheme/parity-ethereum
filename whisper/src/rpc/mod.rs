@@ -254,7 +254,7 @@ impl<P: PoolHandle + 'static, M: Send + Sync + 'static> Whisper for WhisperClien
 
 	fn get_private(&self, id: types::Identity) -> Result<types::Private, Error> {
 		self.store.read().secret(&id.into_inner())
-			.map(|x| H256::from(x.as_ref()))
+			.map(Into::into)
 			.map(HexEncode)
 			.ok_or_else(|| whisper_error("Unknown identity"))
 	}

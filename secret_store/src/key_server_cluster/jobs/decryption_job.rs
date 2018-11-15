@@ -18,6 +18,7 @@ use std::collections::{BTreeSet, BTreeMap};
 use ethereum_types::H256;
 use ethkey::{Public, Secret};
 use crypto::DEFAULT_MAC;
+use crypto::traits::asym::SecretKey;
 use ethkey::crypto::ecies::encrypt;
 use key_server_cluster::{Error, NodeId, DocumentKeyShare, EncryptedDocumentKeyShadow};
 use key_server_cluster::math;
@@ -150,7 +151,7 @@ impl JobExecutor for DecryptionJob {
 			shadow_point: shadow_point,
 			decrypt_shadow: match decrypt_shadow.clone() {
 				None => None,
-				Some(decrypt_shadow) => Some(encrypt(&Public::from_slice(&self.requester[..])?, &DEFAULT_MAC, decrypt_shadow.as_ref())?),
+				Some(decrypt_shadow) => Some(encrypt(&Public::from_slice(&self.requester[..])?, &DEFAULT_MAC, decrypt_shadow.to_vec().as_ref())?),
 			},
 		}))
 	}

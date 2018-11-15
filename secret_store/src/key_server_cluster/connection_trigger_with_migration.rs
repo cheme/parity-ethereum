@@ -125,7 +125,7 @@ impl ConnectionTriggerWithMigration {
 			},
 			session: TriggerSession {
 				connector: Arc::new(ServersSetChangeSessionCreatorConnectorWithMigration {
-					self_node_id: self_key_pair.public().as_ref().into(),
+					self_node_id: self_key_pair.public().into(),
 					migration: Mutex::new(migration),
 					session: Mutex::new(None),
 				}),
@@ -141,9 +141,9 @@ impl ConnectionTriggerWithMigration {
 	fn do_maintain(&mut self) -> Option<Maintain> {
 		loop {
 			let session_state = session_state(self.session.connector.session.lock().clone());
-			let migration_state = migration_state(&self.self_key_pair.public().as_ref().into(), &self.snapshot);
+			let migration_state = migration_state(&self.self_key_pair.public().into(), &self.snapshot);
 
-			let session_action = maintain_session(&self.self_key_pair.public().as_ref().into(), &self.connected, &self.snapshot, migration_state, session_state);
+			let session_action = maintain_session(&self.self_key_pair.public().into(), &self.connected, &self.snapshot, migration_state, session_state);
 			let session_maintain_required = session_action.map(|session_action|
 				self.session.process(session_action)).unwrap_or_default();
 			self.session_action = session_action;

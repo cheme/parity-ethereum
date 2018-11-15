@@ -488,7 +488,7 @@ impl ClusterSessionsListener<DecryptionSession> for ServiceContractListener {
 				let retrieval_result = retrieval_result.map(|key_shadow|
 					session.broadcast_shadows()
 						.and_then(|broadcast_shadows|
-							broadcast_shadows.get(&self.data.self_key_pair.public().as_ref().into())
+							broadcast_shadows.get(&self.data.self_key_pair.public().into())
 								.map(|self_shadow| (
 									broadcast_shadows.keys().map(|k|array_to_address(&k[..])).collect(),
 									key_shadow.decrypted_secret.into(),

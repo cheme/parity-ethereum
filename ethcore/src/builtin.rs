@@ -21,6 +21,7 @@ use std::io::{self, Read};
 
 use byteorder::{ByteOrder, BigEndian};
 use parity_crypto::digest;
+use parity_crypto::traits::asym::PublicKey;
 use num::{BigUint, Zero, One};
 
 use hash::keccak;
@@ -284,7 +285,7 @@ impl Impl for EcRecover {
 		let s = Signature::from_rsv(&r, &s, bit);
 		if s.is_valid() {
 			if let Ok(p) = ec_recover(&s, &hash) {
-				let r = keccak(p);
+				let r = keccak(p.to_vec());
 				output.write(0, &[0; 12]);
 				output.write(12, &r[12..r.len()]);
 			}

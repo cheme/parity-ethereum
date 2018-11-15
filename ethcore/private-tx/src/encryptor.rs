@@ -28,6 +28,7 @@ use ethereum_types::{H128, H256, Address};
 use ethjson;
 use ethkey::{Signature, Password, Public};
 use crypto;
+use crypto::traits::asym::PublicKey;
 use futures::Future;
 use fetch::{Fetch, Client as FetchClient, Method, BodyReader, Request};
 use bytes::{Bytes, ToPretty};
@@ -155,7 +156,7 @@ impl SecretStoreEncryptor {
 		let decrypted_key = Public::from_slice(&decrypted_bytes)?;
 
 		// and now take x coordinate of Public as a key
-		let key: Bytes = decrypted_key.as_ref()[..INIT_VEC_LEN].into();
+		let key: Bytes = AsRef::<[u8]>::as_ref(&decrypted_key.to_vec())[..INIT_VEC_LEN].into();
 
 		// cache the key in the session and clear expired sessions
 		self.sessions.lock().insert(*contract_address, EncryptionSession{

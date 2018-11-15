@@ -807,6 +807,7 @@ impl JobTransport for SigningJobTransport {
 
 #[cfg(test)]
 mod tests {
+	use crypto::traits::asym::PublicKey;
 	use std::sync::Arc;
 	use std::str::FromStr;
 	use std::collections::{BTreeSet, BTreeMap, VecDeque};
@@ -973,7 +974,7 @@ mod tests {
 	#[test]
 	fn schnorr_constructs_in_cluster_of_single_node() {
 		let mut nodes = BTreeMap::new();
-		let self_node_id: NodeId = Random.generate().unwrap().public().as_ref().into();
+		let self_node_id: NodeId = Random.generate().unwrap().public().to_vec().as_ref().into();
 		nodes.insert(self_node_id, Random.generate().unwrap().secret().clone());
 		match SessionImpl::new(SessionParams {
 			meta: SessionMeta {
@@ -989,8 +990,8 @@ mod tests {
 				author: Default::default(),
 				threshold: 0,
 				public: Default::default(),
-				common_point: Some(Random.generate().unwrap().public().as_ref().into()),
-				encrypted_point: Some(Random.generate().unwrap().public().as_ref().into()),
+				common_point: Some(Random.generate().unwrap().public().to_vec().as_ref().into()),
+				encrypted_point: Some(Random.generate().unwrap().public().to_vec().as_ref().into()),
 				versions: vec![DocumentKeyShareVersion {
 					hash: Default::default(),
 					id_numbers: nodes,
@@ -1008,7 +1009,7 @@ mod tests {
 
 	#[test]
 	fn schnorr_fails_to_initialize_if_does_not_have_a_share() {
-		let self_node_id: NodeId = Random.generate().unwrap().public().as_ref().into();
+		let self_node_id: NodeId = Random.generate().unwrap().public().to_vec().as_ref().into();
 		let session = SessionImpl::new(SessionParams {
 			meta: SessionMeta {
 				id: SessionId::default(),
@@ -1030,9 +1031,9 @@ mod tests {
 	#[test]
 	fn schnorr_fails_to_initialize_if_threshold_is_wrong() {
 		let mut nodes = BTreeMap::new();
-		let self_node_id: NodeId = Random.generate().unwrap().public().as_ref().into();
+		let self_node_id: NodeId = Random.generate().unwrap().public().to_vec().as_ref().into();
 		nodes.insert(self_node_id.clone(), Random.generate().unwrap().secret().clone());
-		nodes.insert(Random.generate().unwrap().public().as_ref().into(), Random.generate().unwrap().secret().clone());
+		nodes.insert(Random.generate().unwrap().public().to_vec().as_ref().into(), Random.generate().unwrap().secret().clone());
 		let session = SessionImpl::new(SessionParams {
 			meta: SessionMeta {
 				id: SessionId::default(),
@@ -1047,8 +1048,8 @@ mod tests {
 				author: Default::default(),
 				threshold: 2,
 				public: Default::default(),
-				common_point: Some(Random.generate().unwrap().public().as_ref().into()),
-				encrypted_point: Some(Random.generate().unwrap().public().as_ref().into()),
+				common_point: Some(Random.generate().unwrap().public().to_vec().as_ref().into()),
+				encrypted_point: Some(Random.generate().unwrap().public().to_vec().as_ref().into()),
 				versions: vec![DocumentKeyShareVersion {
 					hash: Default::default(),
 					id_numbers: nodes,
@@ -1111,7 +1112,7 @@ mod tests {
 			message: GenerationMessage::ConfirmInitialization(ConfirmInitialization {
 				session: SessionId::default().into(),
 				session_nonce: 0,
-				derived_point: Public::default().as_ref().into(),
+				derived_point: NodeId::default().into(),
 			}),
 		}), Err(Error::InvalidStateForRequest));
 	}
@@ -1137,7 +1138,7 @@ mod tests {
 				nodes: BTreeMap::new(),
 				is_zero: false,
 				threshold: 1,
-				derived_point: Public::default().as_ref().into(),
+				derived_point: NodeId::default().into(),
 			})
 		}), Err(Error::InvalidMessage));
 	}
@@ -1235,7 +1236,7 @@ mod tests {
 			message: GenerationMessage::ConfirmInitialization(ConfirmInitialization {
 				session: SessionId::default().into(),
 				session_nonce: 0,
-				derived_point: Public::default().as_ref().into(),
+				derived_point: NodeId::default().into(),
 			}),
 		})), Err(Error::ReplayProtection));
 	}

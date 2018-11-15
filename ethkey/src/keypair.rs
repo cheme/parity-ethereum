@@ -16,13 +16,13 @@
 
 use std::fmt;
 use parity_crypto::secp256k1::Secp256k1;
-use parity_crypto::traits::asym::{Asym};
+use parity_crypto::traits::asym::{Asym, PublicKey};
 use rustc_hex::ToHex;
 use keccak::Keccak256;
 use super::{Secret, Public, Address, Error};
 
 pub fn public_to_address(public: &Public) -> Address {
-	array_to_address(public.as_ref())
+	array_to_address((*public).to_vec().as_ref())
 }
 
 pub fn array_to_address(public: &[u8]) -> Address {

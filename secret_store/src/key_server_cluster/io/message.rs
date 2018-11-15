@@ -257,7 +257,7 @@ pub fn decrypt_message(key: &KeyPair, payload: Vec<u8>) -> Result<Vec<u8>, Error
 pub fn fix_shared_key(shared_secret: &Secret) -> Result<KeyPair, Error> {
 	// secret key created in agree function is invalid, as it is not calculated mod EC.field.n
 	// => let's do it manually
-	let shared_secret: H256 = H256::from(shared_secret.as_ref());
+	let shared_secret: H256 = Into::<H256>::into(shared_secret);
 	let shared_secret: U256 = shared_secret.into();
 	let shared_secret: H256 = (shared_secret % curve_order()).into();
 	let shared_key_pair = KeyPair::from_secret_slice(&*shared_secret)?;

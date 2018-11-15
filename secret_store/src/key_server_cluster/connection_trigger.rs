@@ -149,11 +149,11 @@ impl TriggerConnections {
 	pub fn maintain(&self, action: ConnectionsAction, data: &mut ClusterConnectionsData, server_set: &KeyServerSetSnapshot) {
 		match action {
 			ConnectionsAction::ConnectToCurrentSet => {
-				adjust_connections(&self.self_key_pair.public().as_ref().into(), data, &server_set.current_set);
+				adjust_connections(&self.self_key_pair.public().into(), data, &server_set.current_set);
 			},
 			ConnectionsAction::ConnectToMigrationSet => {
 				let migration_set = server_set.migration.as_ref().map(|s| s.set.clone()).unwrap_or_default();
-				adjust_connections(&self.self_key_pair.public().as_ref().into(), data, &migration_set);
+				adjust_connections(&self.self_key_pair.public().into(), data, &migration_set);
 			},
 		}
 	}

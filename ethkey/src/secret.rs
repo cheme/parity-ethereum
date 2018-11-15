@@ -20,7 +20,7 @@ use std::str::FromStr;
 use std::cmp::Ordering;
 use rustc_hex::ToHex;
 use parity_crypto::secp256k1::Secp256k1;
-use parity_crypto::traits::asym::{Asym, FiniteField};
+use parity_crypto::traits::asym::{Asym, FiniteField, PublicKey as PublicTrait, SecretKey as SecretTrait};
 use ethereum_types::{H256, H512};
 use Error;
 
@@ -53,7 +53,7 @@ impl PartialOrd<Public> for Public {
 impl Ord for Public {
 	// there is a more efficient implementation for fixed_hash
 	fn cmp(&self, other: &Self) -> Ordering {
-		self.inner.as_ref().cmp(other.inner.as_ref())
+		self.inner.to_vec().cmp(&other.inner.to_vec())
 	}
 }
 
@@ -77,40 +77,30 @@ impl Deref for Secret {
 	}
 }
 
-impl AsRef<[u8]> for Public {
-	fn as_ref(&self) -> &[u8] {
-		self.inner.as_ref()
-	}
-}
-
 impl Into<H512> for Public {
 	fn into(self) -> H512 {
-		self.inner.as_ref().into()
+		self.inner.to_vec().as_ref().into()
 	}
 }
 
 impl<'a> Into<H512> for &'a Public {
 	fn into(self) -> H512 {
-		self.inner.as_ref().into()
+		self.inner.to_vec().as_ref().into()
 	}
 }
 
-
-impl AsRef<[u8]> for Secret {
-	fn as_ref(&self) -> &[u8] {
-		self.inner.as_ref()
+impl Into<H256> for Secret {
+	fn into(self) -> H256 {
+		AsRef::<[u8]>::as_ref(&self.inner.to_vec()).into()
 	}
 }
 
-/* TODO 
-impl From<<Secp256k1 as Asym>::PublicKey> for Public {
-	fn from(inner: <Secp256k1 as Asym>::PublicKey) -> Self {
-		Public { inner }
+impl<'a> Into<H256> for &'a Secret {
+	fn into(self) -> H256 {
+		AsRef::<[u8]>::as_ref(&self.inner.to_vec()).into()
 	}
 }
-*/
-// TODO use from
-//impl From<<Secp256k1 as Asym>::SecretKey> for Secret {
+
 impl Secret {
 	pub fn from_sec(inner: <Secp256k1 as Asym>::SecretKey) -> Self {
 		Secret { inner }
@@ -143,31 +133,32 @@ impl<'a> std::fmt::LowerHex for LHex<'a> {
 
 impl ToHex for Secret {
 	fn to_hex(&self) -> String {
-		format!("{:x}", LHex(self.inner.as_ref()))
+		format!("{:x}", LHex(self.inner.to_vec().as_ref()))
 	}
 }
 
 impl ToHex for Public {
 	fn to_hex(&self) -> String {
-		format!("{:x}", LHex(self.inner.as_ref()))
+		format!("{:x}", LHex(self.inner.to_vec().as_ref()))
 	}
 }
 
 impl fmt::LowerHex for Secret {
 	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-		LHex(self.inner.as_ref()).fmt(fmt)
+		LHex(self.inner.to_vec().as_ref()).fmt(fmt)
 	}
 }
 
 impl fmt::LowerHex for Public {
 	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-		LHex(self.inner.as_ref()).fmt(fmt)
+		LHex(self.inner.to_vec().as_ref()).fmt(fmt)
 	}
 }
 
 impl fmt::Display for Secret {
 	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-		let v = self.inner.as_ref();
+		let v1 = self.inner.to_vec();
+		let v: &[u8] = v1.as_ref();
 		write!(fmt, "Secret: 0x{:x}{:x}..{:x}{:x}", v[0], v[1], v[30], v[31])
 	}
 }

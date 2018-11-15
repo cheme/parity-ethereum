@@ -319,7 +319,7 @@ impl SessionImpl {
 						nodes: data.nodes.iter().map(|(k, v)| (k.clone().into(), v.id_number.clone().into())).collect(),
 						is_zero: data.is_zero.expect("is_zero is filled in initialization phase; KD phase follows initialization phase; qed"),
 						threshold: data.threshold.expect("threshold is filled in initialization phase; KD phase follows initialization phase; qed"),
-						derived_point: derived_point.as_ref().into(),
+						derived_point: Into::<NodeId>::into(derived_point).into(),
 					})))
 			},
 			None => {
@@ -388,7 +388,7 @@ impl SessionImpl {
 		self.cluster.send(&sender, Message::Generation(GenerationMessage::ConfirmInitialization(ConfirmInitialization {
 			session: self.id.clone().into(),
 			session_nonce: self.nonce,
-			derived_point: derived_point.as_ref().into(),
+			derived_point: Into::<NodeId>::into(derived_point).into(),
 		})))?;
 
 		// update state
@@ -645,7 +645,7 @@ impl SessionImpl {
 
 		// remember derived point
 		let mut data = self.data.lock();
-		let dp_id: NodeId = derived_point.as_ref().into();
+		let dp_id: NodeId = derived_point.clone().into();
 		data.derived_point = Some(derived_point);
 
 		// broadcast derived point && other session paraeters to every other node
@@ -692,7 +692,7 @@ impl SessionImpl {
 					session_nonce: self.nonce,
 					secret1: secret1.into(),
 					secret2: secret2.into(),
-					publics: publics.iter().cloned().map(|p|p.as_ref().into()).collect(),
+					publics: publics.iter().cloned().map(|p|Into::<NodeId>::into(p).into()).collect(),
 				})))?;
 			} else {
 				node_data.secret1 = Some(secret1);
@@ -737,7 +737,7 @@ impl SessionImpl {
 					math::compute_public_share(self_secret_coeff)?
 				};
 
-				self_public_share.as_ref().into()
+				self_public_share.into()
 			} else {
 				// TODO [Trust]: add verification when available
 				Default::default()
@@ -958,6 +958,7 @@ fn check_threshold(threshold: usize, nodes: &BTreeSet<NodeId>) -> Result<(), Err
 
 #[cfg(test)]
 pub mod tests {
+	use crypto::traits::asym::PublicKey;
 	use std::sync::Arc;
 	use std::collections::{BTreeSet, BTreeMap, VecDeque};
 	use std::time::Duration;
@@ -985,7 +986,7 @@ pub mod tests {
 	}
 
 	pub fn generate_nodes_ids(n: usize) -> BTreeSet<NodeId> {
-		(0..n).map(|_| math::generate_random_point().unwrap().as_ref().into()).collect()
+		(0..n).map(|_| math::generate_random_point().unwrap().into()).collect()
 	}
 
 	impl MessageLoop {
@@ -1155,7 +1156,7 @@ pub mod tests {
 		assert_eq!(l.master().on_confirm_initialization(s, &message::ConfirmInitialization {
 			session: sid.into(),
 			session_nonce: 0,
-			derived_point: math::generate_random_point().unwrap().as_ref().into(),
+			derived_point: Into::<NodeId>::into(math::generate_random_point().unwrap()).into(),
 		}).unwrap_err(), Error::InvalidStateForRequest);
 	}
 
@@ -1167,7 +1168,7 @@ pub mod tests {
 		assert_eq!(l.master().on_confirm_initialization(s, &message::ConfirmInitialization {
 			session: sid.into(),
 			session_nonce: 0,
-			derived_point: math::generate_random_point().unwrap().as_ref().into(),
+			derived_point: Into::<NodeId>::into(math::generate_random_point().unwrap()).into(),
 		}).unwrap_err(), Error::InvalidStateForRequest);
 	}
 
@@ -1184,7 +1185,7 @@ pub mod tests {
 			_ => panic!("unexpected"),
 		};
 
-		assert!(NodeId::from(l.master().derived_point().unwrap().as_ref()) != passed_point.into());
+		assert!(NodeId::from(l.master().derived_point().unwrap().to_vec().as_ref()) != passed_point.into());
 	}
 
 	#[test]
@@ -1201,7 +1202,7 @@ pub mod tests {
 			nodes: nodes.into_iter().map(|(k, v)| (k.into(), v.into())).collect(),
 			is_zero: false,
 			threshold: 2,
-			derived_point: math::generate_random_point().unwrap().as_ref().into(),
+			derived_point: Into::<NodeId>::into(math::generate_random_point().unwrap()).into(),
 		}).unwrap_err(), Error::NotEnoughNodesForThreshold);
 	}
 
@@ -1211,7 +1212,7 @@ pub mod tests {
 		assert_eq!(l.first_slave().on_complete_initialization(m, &message::CompleteInitialization {
 			session: sid.into(),
 			session_nonce: 0,
-			derived_point: math::generate_random_point().unwrap().as_ref().into(),
+			derived_point: Into::<NodeId>::into(math::generate_random_point().unwrap()).into(),
 		}).unwrap_err(), Error::InvalidStateForRequest);
 	}
 
@@ -1225,7 +1226,7 @@ pub mod tests {
 		assert_eq!(l.first_slave().on_complete_initialization(l.second_slave().node().clone(), &message::CompleteInitialization {
 			session: sid.into(),
 			session_nonce: 0,
-			derived_point: math::generate_random_point().unwrap().as_ref().into(),
+			derived_point: Into::<NodeId>::into(math::generate_random_point().unwrap()).into(),
 		}).unwrap_err(), Error::InvalidMessage);
 	}
 
@@ -1237,7 +1238,7 @@ pub mod tests {
 			session_nonce: 0,
 			secret1: math::generate_random_scalar().unwrap().into(),
 			secret2: math::generate_random_scalar().unwrap().into(),
-			publics: vec![math::generate_random_point().unwrap().as_ref().into()],
+			publics: vec![Into::<NodeId>::into(math::generate_random_point().unwrap()).into()],
 		}).unwrap_err(), Error::TooEarlyForRequest);
 	}
 
@@ -1256,7 +1257,7 @@ pub mod tests {
 			session_nonce: 0,
 			secret1: math::generate_random_scalar().unwrap().into(),
 			secret2: math::generate_random_scalar().unwrap().into(),
-			publics: vec![math::generate_random_point().unwrap().as_ref().into(), math::generate_random_point().unwrap().as_ref().into()],
+			publics: vec![Into::<NodeId>::into(math::generate_random_point().unwrap()).into(), Into::<NodeId>::into(math::generate_random_point().unwrap()).into()],
 		}).unwrap_err(), Error::InvalidMessage);
 	}
 
@@ -1275,7 +1276,7 @@ pub mod tests {
 			session_nonce: 0,
 			secret1: math::generate_random_scalar().unwrap().into(),
 			secret2: math::generate_random_scalar().unwrap().into(),
-			publics: vec![math::generate_random_point().unwrap().as_ref().into()],
+			publics: vec![Into::<NodeId>::into(math::generate_random_point().unwrap()).into()],
 		}).unwrap_err(), Error::InvalidStateForRequest);
 	}
 
@@ -1285,7 +1286,7 @@ pub mod tests {
 		assert_eq!(l.master().on_public_key_share(s, &message::PublicKeyShare {
 			session: sid.into(),
 			session_nonce: 0,
-			public_share: math::generate_random_point().unwrap().as_ref().into(),
+			public_share: Into::<NodeId>::into(math::generate_random_point().unwrap()).into(),
 		}).unwrap_err(), Error::InvalidStateForRequest);
 	}
 
@@ -1314,7 +1315,7 @@ pub mod tests {
 		assert_eq!(l.second_slave().on_public_key_share(m, &message::PublicKeyShare {
 			session: sid.into(),
 			session_nonce: 0,
-			public_share: math::generate_random_point().unwrap().as_ref().into(),
+			public_share: Into::<NodeId>::into(math::generate_random_point().unwrap()).into(),
 		}).unwrap_err(), Error::InvalidMessage);
 	}
 
@@ -1403,7 +1404,7 @@ pub mod tests {
 			session_nonce: 10,
 			secret1: math::generate_random_scalar().unwrap().into(),
 			secret2: math::generate_random_scalar().unwrap().into(),
-			publics: vec![math::generate_random_point().unwrap().as_ref().into()],
+			publics: vec![Into::<NodeId>::into(math::generate_random_point().unwrap()).into()],
 		})).unwrap_err(), Error::ReplayProtection);
 	}
 }

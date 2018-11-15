@@ -19,10 +19,11 @@ use std::sync::Arc;
 use serde_json;
 use tiny_keccak::Keccak;
 use ethereum_types::{H256, Address};
-use ethkey::{Secret, Public, array_to_address};
+use ethkey::{Secret, array_to_address};
 use kvdb::KeyValueDB;
 use types::{Error, ServerKeyId, NodeId};
 use serialization::{SerializablePublic, SerializableSecret, SerializableH256, SerializableAddress};
+use crypto::traits::asym::SecretKey;
 
 /// Key of version value.
 const DB_META_KEY_VERSION: &'static [u8; 7] = b"version";
@@ -199,7 +200,7 @@ fn upgrade_db(db: Arc<KeyValueDB>) -> Result<Arc<KeyValueDB>, Error> {
 					// in v0 there have been only simultaneous GenEnc sessions.
 					author: Address::default().into(), // added in v1
 					threshold: v0_key.threshold,
-					public: Public::default().as_ref().into(), // addded in v2
+					public: NodeId::default().into(), // addded in v2
 					common_point: Some(v0_key.common_point),
 					encrypted_point: Some(v0_key.encrypted_point),
 					versions: vec![CurrentSerializableDocumentKeyVersion {
@@ -222,7 +223,7 @@ fn upgrade_db(db: Arc<KeyValueDB>) -> Result<Arc<KeyValueDB>, Error> {
 				let current_key = CurrentSerializableDocumentKeyShare {
 					author: array_to_address(&v1_key.author[..]).into(), // added in v1 + changed in v3
 					threshold: v1_key.threshold,
-					public: Public::default().as_ref().into(), // addded in v2
+					public: NodeId::default().into(), // addded in v2
 					common_point: v1_key.common_point,
 					encrypted_point: v1_key.encrypted_point,
 					versions: vec![CurrentSerializableDocumentKeyVersion {
@@ -358,7 +359,7 @@ impl DocumentKeyShareVersion {
 
 		for (node, node_number) in id_numbers {
 			nodes_keccak.update(node);
-			nodes_keccak.update(node_number.as_ref());
+			nodes_keccak.update(&node_number.to_vec()[..]);
 		}
 
 		let mut nodes_keccak_value = [0u8; 32];
@@ -475,8 +476,8 @@ pub mod tests {
 			author: Default::default(),
 			threshold: 100,
 			public: Default::default(),
-			common_point: Some(Random.generate().unwrap().public().as_ref().into()),
-			encrypted_point: Some(Random.generate().unwrap().public().as_ref().into()),
+			common_point: Some(Random.generate().unwrap().public().into()),
+			encrypted_point: Some(Random.generate().unwrap().public().into()),
 			versions: vec![DocumentKeyShareVersion {
 				hash: Default::default(),
 				id_numbers: vec![
@@ -490,8 +491,8 @@ pub mod tests {
 			author: Default::default(),
 			threshold: 200,
 			public: Default::default(),
-			common_point: Some(Random.generate().unwrap().public().as_ref().into()),
-			encrypted_point: Some(Random.generate().unwrap().public().as_ref().into()),
+			common_point: Some(Random.generate().unwrap().public().into()),
+			encrypted_point: Some(Random.generate().unwrap().public().into()),
 			versions: vec![DocumentKeyShareVersion {
 				hash: Default::default(),
 				id_numbers: vec![

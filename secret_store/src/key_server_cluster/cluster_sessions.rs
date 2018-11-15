@@ -196,7 +196,7 @@ impl ClusterSessions {
 		let container_state = Arc::new(Mutex::new(ClusterSessionsContainerState::Idle));
 		let creator_core = Arc::new(SessionCreatorCore::new(config));
 		ClusterSessions {
-			self_node_id: config.self_key_pair.public().as_ref().into(),
+			self_node_id: config.self_key_pair.public().into(),
 			generation_sessions: ClusterSessionsContainer::new(GenerationSessionCreator {
 				core: creator_core.clone(),
 				make_faulty_generation_sessions: AtomicBool::new(false),
@@ -490,8 +490,8 @@ impl Ord for SessionIdWithSubSession {
 		match self.id.cmp(&other.id) {
 			::std::cmp::Ordering::Equal => {
 				// inefficient but only for id equal case
-				let mut self_a = H256::from(self.access_key.as_ref());
-				let mut oth_a = H256::from(other.access_key.as_ref());
+				let mut self_a = Into::<H256>::into(&self.access_key);
+				let mut oth_a = Into::<H256>::into(&other.access_key);
 				let res = self_a.cmp(&oth_a);
 				Clear::clear(&mut self_a[..]);
 				Clear::clear(&mut oth_a[..]);
@@ -569,7 +569,7 @@ pub fn create_cluster_view(data: &Arc<ClusterData>, requires_all_connections: bo
 	}
 
 	let mut connected_nodes = data.connections.connected_nodes()?;
-	connected_nodes.insert(data.self_key_pair.public().as_ref().into());
+	connected_nodes.insert(data.self_key_pair.public().into());
 
 	let connected_nodes_count = connected_nodes.len();
 	Ok(Arc::new(ClusterView::new(data.clone(), connected_nodes, connected_nodes_count + disconnected_nodes_count)))

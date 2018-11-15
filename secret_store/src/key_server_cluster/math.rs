@@ -20,6 +20,7 @@ use types::NodeId;
 use hash::keccak;
 use key_server_cluster::Error;
 use crypto::clear_on_drop::clear::Clear;
+use crypto::traits::asym::PublicKey;
 
 /// Encryption result.
 #[derive(Debug)]
@@ -56,12 +57,12 @@ pub fn generate_random_point() -> Result<Public, Error> {
 
 /// Get X coordinate of point.
 fn public_x(public: &Public) -> H256 {
-	public.as_ref()[0..32].into()
+	public.to_vec().as_ref()[0..32].into()
 }
 
 /// Get Y coordinate of point.
 fn public_y(public: &Public) -> H256 {
-	public.as_ref()[32..64].into()
+	public.to_vec().as_ref()[32..64].into()
 }
 
 /// Compute publics sum.
@@ -423,7 +424,7 @@ pub fn local_compute_schnorr_signature(nonce: &Secret, secret: &Secret, message_
 	let mut nonce_public = math::generation_point();
 	math::public_mul_secret(&mut nonce_public, &nonce).unwrap();
 
-	let combined_hash = combine_message_hash_with_public(message_hash, nonce_public.as_ref())?;
+	let combined_hash = combine_message_hash_with_public(message_hash, nonce_public.to_vec().as_ref())?;
 
 	let mut sig_subtrahend = combined_hash.clone();
 	sig_subtrahend.mul(secret)?;
@@ -442,7 +443,7 @@ pub fn verify_schnorr_signature(public: &Public, signature: &(Secret, Secret), m
 	math::public_mul_secret(&mut nonce_public, &signature.0)?;
 	math::public_add(&mut nonce_public, &addendum)?;
 
-	let combined_hash = combine_message_hash_with_public(message_hash, nonce_public.as_ref())?;
+	let combined_hash = combine_message_hash_with_public(message_hash, nonce_public.to_vec().as_ref())?;
 	Ok(combined_hash == signature.0)
 }
 
@@ -478,8 +479,8 @@ pub fn compute_ecdsa_s(t: usize, signature_s_shares: &[Secret], id_numbers: &[Se
 
 /// Serialize ECDSA signature to [r][s]v form. TODO is it standard, get a fn.
 pub fn serialize_ecdsa_signature(nonce_public: &Public, signature_r: Secret, signature_s: Secret) -> Signature {
-	let mut signature_r = H256::from(signature_r.as_ref());
-	let mut signature_s = H256::from(signature_s.as_ref());
+	let mut signature_r = Into::<H256>::into(signature_r);
+	let mut signature_s = Into::<H256>::into(signature_s);
 	// compute recovery param
 	let mut signature_v = {
 		let nonce_public_x = public_x(nonce_public);
@@ -542,6 +543,7 @@ pub fn compute_ecdsa_inversed_secret_coeff_from_shares(t: usize, id_numbers: &[S
 #[cfg(test)]
 pub mod tests {
 	use std::iter::once;
+	use crypto::traits::asym::PublicKey;
 	use ethkey::{KeyPair, recover, verify_public};
 	use super::*;
 
@@ -841,7 +843,7 @@ pub mod tests {
 			let one_time_artifacts = run_key_generation(t, n, Some(id_numbers), None);
 
 			// step 2: message hash && x coordinate of one-time public value are combined
-			let combined_hash = combine_message_hash_with_public(&message_hash, one_time_artifacts.joint_public.as_ref()).unwrap();
+			let combined_hash = combine_message_hash_with_public(&message_hash, one_time_artifacts.joint_public.to_vec().as_ref()).unwrap();
 
 			// step 3: compute signature shares
 			let partial_signatures: Vec<_> = (0..n)

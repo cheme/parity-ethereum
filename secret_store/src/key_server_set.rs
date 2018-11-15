@@ -289,7 +289,7 @@ impl CachedContract {
 	}
 
 	fn is_isolated(&self) -> bool {
-		!self.snapshot.current_set.contains_key(&self.self_key_pair.public().as_ref().into())
+		!self.snapshot.current_set.contains_key(&self.self_key_pair.public().into())
 	}
 
 	fn snapshot(&self) -> KeyServerSetSnapshot {
@@ -389,7 +389,7 @@ impl CachedContract {
 					true => None,
 				};
 
-				let public_key = self.self_key_pair.public().as_ref().into();
+				let public_key = self.self_key_pair.public().into();
 				let is_migration_confirmed = match migration_set.is_empty() {
 					false if current_set.contains_key(&public_key) || migration_set.contains_key(&public_key) => {
 						let (encoded, decoder) = key_server::functions::is_migration_confirmed::call(self.self_key_pair.address());

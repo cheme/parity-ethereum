@@ -48,7 +48,7 @@ use key_server_cluster::io::{write_message, write_encrypted_message, WriteMessag
 /// Start handshake procedure with another node from the cluster.
 pub fn handshake<A>(a: A, self_key_pair: Arc<NodeKeyPair>, trusted_nodes: BTreeSet<NodeId>) -> Handshake<A> where A: AsyncWrite + AsyncRead {
 	let init_data = Random.generate().map(|kp| kp.secret().clone()).map_err(Into::into)
-		.and_then(|cp| Random.generate().map(|kp| (H256::from(cp.as_ref()), kp)).map_err(Into::into));
+		.and_then(|cp| Random.generate().map(|kp| (Into::<H256>::into(cp), kp)).map_err(Into::into));
 	handshake_with_init_data(a, init_data, self_key_pair, trusted_nodes)
 }
 
@@ -56,7 +56,7 @@ pub fn handshake<A>(a: A, self_key_pair: Arc<NodeKeyPair>, trusted_nodes: BTreeS
 pub fn handshake_with_init_data<A>(a: A, init_data: Result<(H256, KeyPair), Error>, self_key_pair: Arc<NodeKeyPair>, trusted_nodes: BTreeSet<NodeId>) -> Handshake<A> where A: AsyncWrite + AsyncRead {
 	let handshake_input_data = init_data
 		.and_then(|(cp, kp)| sign(kp.secret(), &cp).map(|sp| (cp, kp, sp)).map_err(Into::into))
-		.and_then(|(cp, kp, sp)| Handshake::<A>::make_public_key_message(self_key_pair.public().as_ref().into(), cp.clone(), sp).map(|msg| (cp, kp, msg)));
+		.and_then(|(cp, kp, sp)| Handshake::<A>::make_public_key_message(self_key_pair.public().into(), cp.clone(), sp).map(|msg| (cp, kp, msg)));
 
 	let (error, cp, kp, state) = match handshake_input_data {
 		Ok((cp, kp, msg)) => (None, cp, Some(kp), HandshakeState::SendPublicKey(write_message(a, msg))),
@@ -82,7 +82,7 @@ pub fn handshake_with_init_data<A>(a: A, init_data: Result<(H256, KeyPair), Erro
 pub fn accept_handshake<A>(a: A, self_key_pair: Arc<NodeKeyPair>) -> Handshake<A> where A: AsyncWrite + AsyncRead {
 	let self_confirmation_plain = Random.generate().map(|kp| kp.secret().clone()).map_err(Into::into);
 	let handshake_input_data = self_confirmation_plain
-		.and_then(|cp| Random.generate().map(|kp| (H256::from(cp.as_ref()), kp)).map_err(Into::into));
+		.and_then(|cp| Random.generate().map(|kp| (Into::<H256>::into(cp), kp)).map_err(Into::into));
 
 	let (error, cp, kp, state) = match handshake_input_data {
 		Ok((cp, kp)) => (None, cp, Some(kp), HandshakeState::ReceivePublicKey(read_message(a))),
@@ -263,7 +263,7 @@ impl<A> Future for Handshake<A> where A: AsyncRead + AsyncWrite {
 						Err(err) => return Ok((stream, Err(err)).into()),
 					};
 
-					let message = match Handshake::<A>::make_public_key_message(self.self_key_pair.public().as_ref().into(), self.self_confirmation_plain.clone(), confirmation_signed_session) {
+					let message = match Handshake::<A>::make_public_key_message(self.self_key_pair.public().into(), self.self_confirmation_plain.clone(), confirmation_signed_session) {
 						Ok(message) => message,
 						Err(err) => return Ok((stream, Err(err)).into()),
 					};
@@ -330,8 +330,8 @@ mod tests {
 	fn prepare_test_io() -> (H256, TestIo) {
 		let mut io = TestIo::new();
 
-		let self_confirmation_plain = H256::from(Random.generate().unwrap().secret().as_ref());
-		let peer_confirmation_plain = H256::from(Random.generate().unwrap().secret().as_ref());
+		let self_confirmation_plain = Into::<H256>::into(Random.generate().unwrap().secret());
+		let peer_confirmation_plain = Into::<H256>::into(Random.generate().unwrap().secret());
 
 		let self_confirmation_signed = sign(io.peer_key_pair().secret(), &self_confirmation_plain).unwrap();
 		let peer_confirmation_signed = sign(io.peer_session_key_pair().secret(), &peer_confirmation_plain).unwrap();

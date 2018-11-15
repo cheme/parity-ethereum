@@ -35,7 +35,7 @@ pub mod ecdh {
 pub mod ecies {
 	use parity_crypto::{aes, digest, hmac, is_equal};
 	use parity_crypto::secp256k1::Secp256k1;
-	use parity_crypto::traits::asym::{Asym};
+	use parity_crypto::traits::asym::{Asym, PublicKey, SecretKey};
 	use parity_crypto::clear_on_drop::clear::Clear;
 	use ethereum_types::H128;
 	use super::{ecdh, Error};
@@ -58,7 +58,7 @@ pub mod ecies {
 		msg[0] = 0x04u8;
 		{
 			let msgd = &mut msg[1..];
-			msgd[0..64].copy_from_slice(r.public().as_ref());
+			msgd[0..64].copy_from_slice(r.public().to_vec().as_ref());
 			let iv = H128::random();
 			msgd[64..80].copy_from_slice(&iv);
 			{
@@ -122,7 +122,7 @@ pub mod ecies {
 		let mut ctr = 1u32;
 		let mut written = 0usize;
     let mut buf_secret = [0;32];
-    buf_secret.copy_from_slice(secret.as_ref());
+    buf_secret.copy_from_slice((*secret).to_vec().as_ref());
 
 		while written < dest.len() {
 			let mut hasher = digest::Hasher::sha256();

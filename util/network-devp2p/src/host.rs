@@ -47,6 +47,7 @@ use ip_utils::{map_external_address, select_public_address};
 use parity_path::restrict_permissions_owner;
 use parking_lot::{Mutex, RwLock};
 use network::{ConnectionFilter, ConnectionDirection};
+use crypto::traits::asym::PublicKey;
 
 type Slab<T> = ::slab::Slab<T, usize>;
 
@@ -236,7 +237,7 @@ impl HostInfo {
 	}
 
 	pub(crate) fn id(&self) -> NodeId {
-		H512::from(self.keys.public().as_ref())
+		H512::from(self.keys.public().to_vec().as_ref())
 	}
 }
 

@@ -660,8 +660,8 @@ impl SessionImpl {
 					session: core.meta.id.clone().into(),
 					sub_session: core.access_key.clone().into(),
 					session_nonce: nonce,
-					decrypted_secret: document_key.decrypted_secret.as_ref().into(),
-					common_point: document_key.common_point.clone().map(|p|p.as_ref().into()),
+					decrypted_secret: Into::<NodeId>::into(&document_key.decrypted_secret).into(),
+					common_point: document_key.common_point.clone().map(|p|Into::<NodeId>::into(p).into()),
 					decrypt_shadows: document_key.decrypt_shadows.clone(),
 				}))),
 				Err(error) => core.cluster.send(&master, Message::Decryption(DecryptionMessage::DecryptionSessionError(DecryptionSessionError {
@@ -809,7 +809,7 @@ impl JobTransport for DecryptionJobTransport {
 				sub_session: self.access_key.clone().into(),
 				session_nonce: self.nonce,
 				request_id: response.request_id.into(),
-				shadow_point: response.shadow_point.as_ref().into(),
+				shadow_point: Into::<NodeId>::into(response.shadow_point).into(),
 				decrypt_shadow: response.decrypt_shadow,
 			})))?;
 		}
@@ -842,6 +842,7 @@ pub fn create_default_decryption_session() -> Arc<SessionImpl> {
 
 #[cfg(test)]
 mod tests {
+	use crypto::traits::asym::PublicKey;
 	use std::sync::Arc;
 	use std::collections::{BTreeMap, VecDeque};
 	use acl_storage::DummyAclStorage;
@@ -967,7 +968,7 @@ mod tests {
 	#[test]
 	fn constructs_in_cluster_of_single_node() {
 		let mut nodes: BTreeMap<NodeId, _> = BTreeMap::new();
-		let self_node_id = Random.generate().unwrap().public().as_ref().into();
+		let self_node_id = Random.generate().unwrap().public().into();
 		nodes.insert(self_node_id, Random.generate().unwrap().secret().clone());
 		match SessionImpl::new(SessionParams {
 			meta: SessionMeta {
@@ -983,8 +984,8 @@ mod tests {
 				author: Default::default(),
 				threshold: 0,
 				public: Default::default(),
-				common_point: Some(Random.generate().unwrap().public().as_ref().into()),
-				encrypted_point: Some(Random.generate().unwrap().public().as_ref().into()),
+				common_point: Some(Random.generate().unwrap().public().into()),
+				encrypted_point: Some(Random.generate().unwrap().public().into()),
 				versions: vec![DocumentKeyShareVersion {
 					hash: Default::default(),
 					id_numbers: nodes,
@@ -1002,7 +1003,7 @@ mod tests {
 
 	#[test]
 	fn fails_to_initialize_if_does_not_have_a_share() {
-		let self_node_id: NodeId = Random.generate().unwrap().public().as_ref().into();
+		let self_node_id: NodeId = Random.generate().unwrap().public().into();
 		let session = SessionImpl::new(SessionParams {
 			meta: SessionMeta {
 				id: SessionId::default(),
@@ -1024,9 +1025,9 @@ mod tests {
 	#[test]
 	fn fails_to_initialize_if_threshold_is_wrong() {
 		let mut nodes = BTreeMap::new();
-		let self_node_id: NodeId = Random.generate().unwrap().public().as_ref().into();
+		let self_node_id: NodeId = Random.generate().unwrap().public().into();
 		nodes.insert(self_node_id.clone(), Random.generate().unwrap().secret().clone());
-		nodes.insert(Random.generate().unwrap().public().as_ref().into(), Random.generate().unwrap().secret().clone());
+		nodes.insert(Random.generate().unwrap().public().into(), Random.generate().unwrap().secret().clone());
 		let session = SessionImpl::new(SessionParams {
 			meta: SessionMeta {
 				id: SessionId::default(),
@@ -1041,8 +1042,8 @@ mod tests {
 				author: Default::default(),
 				threshold: 2,
 				public: Default::default(),
-				common_point: Some(Random.generate().unwrap().public().as_ref().into()),
-				encrypted_point: Some(Random.generate().unwrap().public().as_ref().into()),
+				common_point: Some(Random.generate().unwrap().public().into()),
+				encrypted_point: Some(Random.generate().unwrap().public().into()),
 				versions: vec![DocumentKeyShareVersion {
 					hash: Default::default(),
 					id_numbers: nodes,
@@ -1138,7 +1139,7 @@ mod tests {
 			sub_session: sessions[0].access_key().clone().into(),
 			session_nonce: 0,
 			request_id: Random.generate().unwrap().secret().clone().into(),
-			shadow_point: Random.generate().unwrap().public().clone().as_ref().into(),
+			shadow_point: Random.generate().unwrap().public().to_vec().as_ref().into(),
 			decrypt_shadow: None,
 		}).unwrap_err(), Error::InvalidStateForRequest);
 	}

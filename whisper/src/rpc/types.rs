@@ -25,15 +25,17 @@ use hex::{ToHex, FromHex};
 use serde::{Serialize, Serializer, Deserialize, Deserializer};
 use serde::de::{Error, Visitor};
 use crypto::secp256k1::Secp256k1;
-use crypto::traits::asym::Asym;
+use crypto::traits::asym::{ Asym, PublicKey };
 
 /// Helper trait for generic hex bytes encoding.
-pub trait HexEncodable: Sized + ToHex {
+pub trait HexEncodable: Sized {
 	fn from_bytes(bytes: Vec<u8>) -> Option<Self>;
+	fn to_hex(&self) -> String;
 }
 
 impl HexEncodable for Vec<u8> {
 	fn from_bytes(bytes: Vec<u8>) -> Option<Self> { Some(bytes) }
+	fn to_hex(&self) -> String { AsRef::<[u8]>::as_ref(self).to_hex() }
 }
 
 macro_rules! impl_hex_for_hash {
@@ -46,6 +48,9 @@ macro_rules! impl_hex_for_hash {
 					} else {
 						Some($t::from_slice(&bytes))
 					}
+				}
+				fn to_hex(&self) -> String {
+					AsRef::<[u8]>::as_ref(self).to_hex()
 				}
 			}
 		)*
@@ -143,24 +148,25 @@ impl<'a, T: HexEncodable> Visitor<'a> for HexEncodeVisitor<T> {
 	}
 }
 
-impl AsRef<[u8]> for Public {
-	fn as_ref(&self) -> &[u8] {
-		self.0.as_ref()
-	}
-}
-
 impl HexEncodable for ::ethkey::Public {
 	fn from_bytes(bytes: Vec<u8>) -> Option<Self> {
 		Secp256k1::public_from_slice(&bytes[..])
 			.map(::ethkey::Public::from_pub).ok()
 	}
-}
 
+	fn to_hex(&self) -> String {
+		AsRef::<[u8]>::as_ref(&self.to_vec()).to_hex()
+	}
+}
 
 impl HexEncodable for Public {
 	fn from_bytes(bytes: Vec<u8>) -> Option<Self> {
 		Secp256k1::public_from_slice(&bytes[..])
 			.map(::ethkey::Public::from_pub).map(HexEncode).ok()
+	}
+
+	fn to_hex(&self) -> String {
+		AsRef::<[u8]>::as_ref(&self.to_vec()).to_hex()
 	}
 }
 

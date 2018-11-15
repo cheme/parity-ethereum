@@ -29,6 +29,7 @@ use std::io::{self, Cursor, Read, Write};
 use io::{IoContext, StreamToken};
 use handshake::Handshake;
 use crypto::aes::{ AesEcb256, AesCtr256 };
+use crypto::traits::asym::{ SecretKey };
 use tiny_keccak::Keccak;
 use bytes::{Buf, BufMut};
 use ethkey::crypto;
@@ -307,7 +308,7 @@ impl EncryptedConnection {
 			handshake.remote_nonce.copy_to(&mut nonce_material[32..64]);
 		}
 		let mut key_material = H512::new();
-		&mut key_material[0..32].copy_from_slice(shared.as_ref());
+		&mut key_material[0..32].copy_from_slice(shared.to_vec().as_ref());
 		write_keccak(&nonce_material, &mut key_material[32..64]);
 		keccak(&key_material).copy_to(&mut key_material[32..64]);
 		keccak(&key_material).copy_to(&mut key_material[32..64]);

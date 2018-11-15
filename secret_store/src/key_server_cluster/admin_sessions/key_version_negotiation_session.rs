@@ -588,6 +588,7 @@ impl SessionResultComputer for LargestSupportResultComputer {
 
 #[cfg(test)]
 mod tests {
+	use crypto::traits::asym::PublicKey;
 	use std::sync::Arc;
 	use std::collections::{VecDeque, BTreeMap, BTreeSet};
 	use ethkey::array_to_address;
@@ -632,7 +633,7 @@ mod tests {
 
 	impl MessageLoop {
 		pub fn prepare_nodes(nodes_num: usize) -> BTreeMap<NodeId, Arc<DummyKeyStorage>> {
-			(0..nodes_num).map(|_| (math::generate_random_point().unwrap().as_ref().into(),
+			(0..nodes_num).map(|_| (math::generate_random_point().unwrap().to_vec().as_ref().into(),
 				Arc::new(DummyKeyStorage::default()))).collect()
 		}
 
@@ -768,7 +769,7 @@ mod tests {
 		ml.session(0).initialize(ml.nodes.keys().cloned().collect()).unwrap();
 		assert_eq!(ml.session(0).data.lock().state, SessionState::WaitingForResponses);
 
-		let version_id = H256::from(math::generate_random_scalar().unwrap().as_ref());
+		let version_id = Into::<H256>::into(math::generate_random_scalar().unwrap());
 		assert_eq!(ml.session(0).process_message(ml.node_id(1), &KeyVersionNegotiationMessage::KeyVersions(KeyVersions {
 			session: Default::default(),
 			sub_session: math::generate_random_scalar().unwrap().into(),
@@ -793,7 +794,7 @@ mod tests {
 		let ml = MessageLoop::empty(3);
 		ml.session(0).initialize(ml.nodes.keys().cloned().collect()).unwrap();
 
-		let version_id = H256::from(math::generate_random_scalar().unwrap().as_ref());
+		let version_id = Into::<H256>::into(math::generate_random_scalar().unwrap());
 		assert_eq!(ml.session(0).process_message(ml.node_id(1), &KeyVersionNegotiationMessage::KeyVersions(KeyVersions {
 			session: Default::default(),
 			sub_session: math::generate_random_scalar().unwrap().into(),
@@ -815,7 +816,7 @@ mod tests {
 		let ml = MessageLoop::empty(2);
 		ml.session(0).initialize(ml.nodes.keys().cloned().collect()).unwrap();
 
-		let version_id = H256::from(math::generate_random_scalar().unwrap().as_ref());
+		let version_id = Into::<H256>::into(math::generate_random_scalar().unwrap());
 		assert_eq!(ml.session(0).process_message(ml.node_id(1), &KeyVersionNegotiationMessage::KeyVersions(KeyVersions {
 			session: Default::default(),
 			sub_session: math::generate_random_scalar().unwrap().into(),
@@ -828,7 +829,7 @@ mod tests {
 	#[test]
 	fn fast_negotiation_does_not_completes_instantly_when_enough_share_owners_are_connected() {
 		let nodes = MessageLoop::prepare_nodes(2);
-		let version_id = H256::from(math::generate_random_scalar().unwrap().as_ref());
+		let version_id = Into::<H256>::into(math::generate_random_scalar().unwrap());
 		nodes.values().nth(0).unwrap().insert(Default::default(), DocumentKeyShare {
 			author: Default::default(),
 			threshold: 1,

@@ -27,6 +27,7 @@ use io::{IoContext, StreamToken};
 use ethkey::{KeyPair, Public, Secret, recover, sign, Generator, Random};
 use ethkey::crypto::{ecdh, ecies};
 use crypto::clear_on_drop::clear::Clear;
+use crypto::traits::asym::{ SecretKey, PublicKey };
 use network::{Error, ErrorKind};
 use host::HostInfo;
 
@@ -154,7 +155,7 @@ impl Handshake {
 		self.remote_nonce.clone_from_slice(remote_nonce);
 		self.remote_version = remote_version;
 		let pub_id = Public::from_slice(&self.id[..])?;
-		let mut shared = H256::from(ecdh::agree(host_secret, &pub_id)?.as_ref());
+		let mut shared = H256::from(AsRef::<[u8]>::as_ref(&ecdh::agree(host_secret, &pub_id)?.to_vec()));
 		let signature = H520::from_slice(sig);
 		let sh_nonce = shared ^ self.remote_nonce;
 		Clear::clear(&mut shared[..]);
@@ -264,11 +265,11 @@ impl Handshake {
 			let (nonce, _) = rest.split_at_mut(32);
 
 			// E(remote-pubk, S(ecdhe-random, ecdh-shared-secret^nonce) || H(ecdhe-random-pubk) || pubk || nonce || 0x0)
-			let mut shared = H256::from(ecdh::agree(secret, &publ)?.as_ref());
+			let mut shared = H256::from(AsRef::<[u8]>::as_ref(&ecdh::agree(secret, &publ)?.to_vec()));
 			let sh_nonce = shared ^ self.nonce;
 			Clear::clear(&mut shared[..]);
 			sig.copy_from_slice(&*sign(self.ecdhe.secret(), &(sh_nonce))?);
-			write_keccak(self.ecdhe.public().as_ref(), hepubk);
+			write_keccak(AsRef::<[u8]>::as_ref(&self.ecdhe.public().to_vec()), hepubk);
 			pubk.copy_from_slice(public);
 			nonce.copy_from_slice(&self.nonce);
 		}
@@ -289,7 +290,7 @@ impl Handshake {
 			data[len - 1] = 0x0;
 			let (epubk, rest) = data.split_at_mut(64);
 			let (nonce, _) = rest.split_at_mut(32);
-			epubk.copy_from_slice(self.ecdhe.public().as_ref());
+			epubk.copy_from_slice(AsRef::<[u8]>::as_ref(&self.ecdhe.public().to_vec()));
 			self.nonce.copy_to(nonce);
 		}
     // TODO instantiate each time is bad : switch self.id type
@@ -305,7 +306,7 @@ impl Handshake {
 	fn write_ack_eip8<Message>(&mut self, io: &IoContext<Message>) -> Result<(), Error> where Message: Send + Clone + Sync + 'static {
 		trace!(target: "network", "Sending EIP8 handshake ack to {:?}", self.connection.remote_addr_str());
 		let mut rlp = RlpStream::new_list(3);
-		rlp.append(&H512::from(self.ecdhe.public().as_ref()));
+		rlp.append(&H512::from(AsRef::<[u8]>::as_ref(&self.ecdhe.public().to_vec())));
 		rlp.append(&self.nonce);
 		rlp.append(&PROTOCOL_VERSION);
 

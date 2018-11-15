@@ -22,6 +22,7 @@ use ethcore::{contract_address, CreateContractAddress};
 use miner;
 use transaction::{LocalizedTransaction, Action, PendingTransaction, SignedTransaction};
 use v1::types::{Bytes, H160, H256, U256, H512, U64, TransactionCondition};
+use crypto::traits::asym::PublicKey;
 
 /// Transaction
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
@@ -195,7 +196,7 @@ impl Transaction {
 				Action::Call(_) => None,
 			},
 			raw: ::rlp::encode(&t.signed).into(),
-			public_key: t.recover_public().ok().map(|p|p.as_ref().into()),
+			public_key: t.recover_public().ok().map(|p|p.to_vec().as_ref().into()),
 			chain_id: t.chain_id().map(U64::from),
 			standard_v: t.standard_v().into(),
 			v: t.original_v().into(),
@@ -229,7 +230,7 @@ impl Transaction {
 				Action::Call(_) => None,
 			},
 			raw: ::rlp::encode(&t).into(),
-			public_key: t.public_key().map(|p|p.as_ref().into()),
+			public_key: t.public_key().map(|p|p.to_vec().as_ref().into()),
 			chain_id: t.chain_id().map(U64::from),
 			standard_v: t.standard_v().into(),
 			v: t.original_v().into(),

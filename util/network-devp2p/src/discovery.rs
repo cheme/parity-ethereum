@@ -27,6 +27,7 @@ use node_table::*;
 use network::{Error, ErrorKind};
 use ethkey::{Secret, KeyPair, sign, recover};
 use network::IpFilter;
+use crypto::traits::asym::PublicKey;
 
 use PROTOCOL_VERSION;
 
@@ -150,7 +151,7 @@ pub struct TableUpdates {
 
 impl<'a> Discovery<'a> {
 	pub fn new(key: &KeyPair, public: NodeEndpoint, ip_filter: IpFilter) -> Discovery<'static> {
-    let p512 = H512::from(key.public().as_ref());
+    let p512 = H512::from(AsRef::<[u8]>::as_ref(&key.public().to_vec()));
     let id_hash = keccak(&p512);
 		Discovery {
 			id: p512,
@@ -436,7 +437,7 @@ impl<'a> Discovery<'a> {
 
 		let signed = &packet[(32 + 65)..];
 		let signature = H520::from_slice(&packet[32..(32 + 65)]);
-		let node_id = H512::from(recover(&signature.into(), &keccak(signed))?.as_ref());
+		let node_id = H512::from(AsRef::<[u8]>::as_ref(&recover(&signature.into(), &keccak(signed))?.to_vec()));
 		let packet_id = signed[0];
 		let rlp = Rlp::new(&signed[1..]);
 		match packet_id {
@@ -766,6 +767,7 @@ mod tests {
 	use std::str::FromStr;
 	use rustc_hex::FromHex;
 	use ethkey::{Random, Generator};
+	use crypto::traits::asym::PublicKey;
 
 	#[test]
 	fn find_node() {
@@ -903,7 +905,7 @@ mod tests {
 
 		// FIND_NODE times out because it doesn't receive k results.
 		let key = Random.generate().unwrap();
-		discovery.send_find_node(&node_entries[100], &H512::from(key.public().as_ref())).unwrap();
+		discovery.send_find_node(&node_entries[100], &H512::from(AsRef::<[u8]>::as_ref(&key.public().to_vec()))).unwrap();
 		for payload in Discovery::prepare_neighbours_packets(&node_entries[101..116]) {
 			let packet = assemble_packet(PACKET_NEIGHBOURS, &payload, &key.secret()).unwrap();
 			discovery.on_packet(&packet, from.clone()).unwrap();
@@ -915,7 +917,7 @@ mod tests {
 		assert!(removed > 0);
 
 		// FIND_NODE does not time out because it receives k results.
-		discovery.send_find_node(&node_entries[100], &H512::from(key.public().as_ref())).unwrap();
+		discovery.send_find_node(&node_entries[100], &H512::from(AsRef::<[u8]>::as_ref(&key.public().to_vec()))).unwrap();
 		for payload in Discovery::prepare_neighbours_packets(&node_entries[101..117]) {
 			let packet = assemble_packet(PACKET_NEIGHBOURS, &payload, &key.secret()).unwrap();
 			discovery.on_packet(&packet, from.clone()).unwrap();

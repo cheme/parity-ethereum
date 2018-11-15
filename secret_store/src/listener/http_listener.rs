@@ -254,7 +254,7 @@ fn return_empty(req_uri: &Uri, empty: Result<(), Error>) -> HttpResponse<Body> {
 }
 
 fn return_server_public_key(req_uri: &Uri, server_public: Result<Public, Error>) -> HttpResponse<Body> {
-	return_bytes(req_uri, server_public.map(|k| Some(SerializablePublic(k.as_ref().into()))))
+	return_bytes(req_uri, server_public.map(|k| Some(SerializablePublic(k.into()))))
 }
 
 fn return_message_signature(req_uri: &Uri, signature: Result<EncryptedDocumentKey, Error>) -> HttpResponse<Body> {
@@ -269,8 +269,8 @@ fn return_document_key_shadow(req_uri: &Uri, document_key_shadow: Result<Encrypt
 	-> HttpResponse<Body>
 {
 	return_bytes(req_uri, document_key_shadow.map(|k| Some(SerializableEncryptedDocumentKeyShadow {
-		decrypted_secret: k.decrypted_secret.as_ref().into(),
-		common_point: k.common_point.expect("always filled when requesting document_key_shadow; qed").as_ref().into(),
+		decrypted_secret: Into::<NodeId>::into(k.decrypted_secret).into(),
+		common_point: Into::<NodeId>::into(k.common_point.expect("always filled when requesting document_key_shadow; qed")).into(),
 		decrypt_shadows: k.decrypt_shadows.expect("always filled when requesting document_key_shadow; qed").into_iter().map(Into::into).collect(),
 	})))
 }

@@ -125,7 +125,7 @@ impl Requester {
 	pub fn node_id(&self, server_key_id: &ServerKeyId) -> Result<NodeId, String> {
 		match *self {
 			Requester::Signature(ref signature) => ethkey::recover(signature, server_key_id)
-				.map(|p| NodeId::from(p.as_ref()))
+				.map(Into::<NodeId>::into)
 				.map_err(|e| format!("bad signature: {}", e)),
 			Requester::Public(ref public) => Ok(public.clone()),
 			Requester::Address(_) => Err("cannot recover public from address".into()),
