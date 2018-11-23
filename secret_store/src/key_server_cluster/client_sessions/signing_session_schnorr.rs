@@ -973,7 +973,7 @@ mod tests {
 	#[test]
 	fn schnorr_constructs_in_cluster_of_single_node() {
 		let mut nodes = BTreeMap::new();
-		let self_node_id: NodeId = Random.generate().unwrap().public().to_vec().as_ref().into();
+		let self_node_id: NodeId = AsRef::<[u8]>::as_ref(&Random.generate().unwrap().public().to_vec()).into();
 		nodes.insert(self_node_id, Random.generate().unwrap().secret().clone());
 		match SessionImpl::new(SessionParams {
 			meta: SessionMeta {
@@ -989,8 +989,8 @@ mod tests {
 				author: Default::default(),
 				threshold: 0,
 				public: Default::default(),
-				common_point: Some(Random.generate().unwrap().public().to_vec().as_ref().into()),
-				encrypted_point: Some(Random.generate().unwrap().public().to_vec().as_ref().into()),
+				common_point: Some(AsRef::<[u8]>::as_ref(&Random.generate().unwrap().public().to_vec()).into()),
+				encrypted_point: Some(AsRef::<[u8]>::as_ref(&Random.generate().unwrap().public().to_vec()).into()),
 				versions: vec![DocumentKeyShareVersion {
 					hash: Default::default(),
 					id_numbers: nodes,
@@ -1008,7 +1008,7 @@ mod tests {
 
 	#[test]
 	fn schnorr_fails_to_initialize_if_does_not_have_a_share() {
-		let self_node_id: NodeId = Random.generate().unwrap().public().to_vec().as_ref().into();
+		let self_node_id: NodeId = AsRef::<[u8]>::as_ref(&Random.generate().unwrap().public().to_vec()).into();
 		let session = SessionImpl::new(SessionParams {
 			meta: SessionMeta {
 				id: SessionId::default(),
@@ -1030,9 +1030,9 @@ mod tests {
 	#[test]
 	fn schnorr_fails_to_initialize_if_threshold_is_wrong() {
 		let mut nodes = BTreeMap::new();
-		let self_node_id: NodeId = Random.generate().unwrap().public().to_vec().as_ref().into();
+		let self_node_id: NodeId = AsRef::<[u8]>::as_ref(&Random.generate().unwrap().public().to_vec()).into();
 		nodes.insert(self_node_id.clone(), Random.generate().unwrap().secret().clone());
-		nodes.insert(Random.generate().unwrap().public().to_vec().as_ref().into(), Random.generate().unwrap().secret().clone());
+		nodes.insert(AsRef::<[u8]>::as_ref(&Random.generate().unwrap().public().to_vec()).into(), Random.generate().unwrap().secret().clone());
 		let session = SessionImpl::new(SessionParams {
 			meta: SessionMeta {
 				id: SessionId::default(),
@@ -1047,8 +1047,8 @@ mod tests {
 				author: Default::default(),
 				threshold: 2,
 				public: Default::default(),
-				common_point: Some(Random.generate().unwrap().public().to_vec().as_ref().into()),
-				encrypted_point: Some(Random.generate().unwrap().public().to_vec().as_ref().into()),
+				common_point: Some(AsRef::<[u8]>::as_ref(&Random.generate().unwrap().public().to_vec()).into()),
+				encrypted_point: Some(AsRef::<[u8]>::as_ref(&Random.generate().unwrap().public().to_vec()).into()),
 				versions: vec![DocumentKeyShareVersion {
 					hash: Default::default(),
 					id_numbers: nodes,

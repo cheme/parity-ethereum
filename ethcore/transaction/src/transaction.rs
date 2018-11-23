@@ -619,7 +619,7 @@ mod tests {
 			value: U256::from(1),
 			data: b"Hello!".to_vec()
 		}.sign(&key.secret(), None);
-		assert_eq!(Address::from(keccak(key.public().to_vec().as_ref())), t.sender());
+		assert_eq!(Address::from(keccak(AsRef::<[u8]>::as_ref(&key.public().to_vec()))), t.sender());
 		assert_eq!(t.chain_id(), None);
 	}
 
@@ -653,7 +653,7 @@ mod tests {
 			value: U256::from(1),
 			data: b"Hello!".to_vec()
 		}.sign(&key.secret(), Some(69));
-		assert_eq!(Address::from(keccak(key.public().to_vec().as_ref())), t.sender());
+		assert_eq!(Address::from(keccak(AsRef::<[u8]>::as_ref(&key.public().to_vec()))), t.sender());
 		assert_eq!(t.chain_id(), Some(69));
 	}
 

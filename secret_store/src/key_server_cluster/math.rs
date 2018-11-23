@@ -57,12 +57,12 @@ pub fn generate_random_point() -> Result<Public, Error> {
 
 /// Get X coordinate of point.
 fn public_x(public: &Public) -> H256 {
-	public.to_vec().as_ref()[0..32].into()
+	AsRef::<[u8]>::as_ref(&public.to_vec())[0..32].into()
 }
 
 /// Get Y coordinate of point.
 fn public_y(public: &Public) -> H256 {
-	public.to_vec().as_ref()[32..64].into()
+	AsRef::<[u8]>::as_ref(&public.to_vec())[32..64].into()
 }
 
 /// Compute publics sum.

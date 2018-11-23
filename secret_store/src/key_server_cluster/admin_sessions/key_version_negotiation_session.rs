@@ -633,7 +633,7 @@ mod tests {
 
 	impl MessageLoop {
 		pub fn prepare_nodes(nodes_num: usize) -> BTreeMap<NodeId, Arc<DummyKeyStorage>> {
-			(0..nodes_num).map(|_| (math::generate_random_point().unwrap().to_vec().as_ref().into(),
+			(0..nodes_num).map(|_| (AsRef::<[u8]>::as_ref(&math::generate_random_point().unwrap().to_vec()).into(),
 				Arc::new(DummyKeyStorage::default()))).collect()
 		}
 

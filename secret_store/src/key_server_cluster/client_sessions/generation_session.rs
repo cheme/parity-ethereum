@@ -1185,7 +1185,7 @@ pub mod tests {
 			_ => panic!("unexpected"),
 		};
 
-		assert!(NodeId::from(l.master().derived_point().unwrap().to_vec().as_ref()) != passed_point.into());
+		assert!(NodeId::from(AsRef::<[u8]>::as_ref(&l.master().derived_point().unwrap().to_vec())) != passed_point.into());
 	}
 
 	#[test]

@@ -1143,7 +1143,7 @@ mod tests {
 			sub_session: sessions[0].access_key().clone().into(),
 			session_nonce: 0,
 			request_id: Random.generate().unwrap().secret().clone().into(),
-			shadow_point: Random.generate().unwrap().public().to_vec().as_ref().into(),
+			shadow_point: AsRef::<[u8]>::as_ref(&Random.generate().unwrap().public().to_vec()).into(),
 			decrypt_shadow: None,
 		}).unwrap_err(), Error::InvalidStateForRequest);
 	}

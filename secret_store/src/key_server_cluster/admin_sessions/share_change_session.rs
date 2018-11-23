@@ -308,7 +308,7 @@ mod tests {
 
 	#[test]
 	fn share_change_plan_creates_empty_plan() {
-		let cluster_nodes: Vec<NodeId> = (0..3).map(|_| math::generate_random_point().unwrap().to_vec().as_ref().into()).collect();
+		let cluster_nodes: Vec<NodeId> = (0..3).map(|_| AsRef::<[u8]>::as_ref(&math::generate_random_point().unwrap().to_vec()).into()).collect();
 		let master = cluster_nodes[0].clone();
 		let old_key_version_owners = cluster_nodes.iter().cloned().collect();
 		let new_nodes_set = cluster_nodes.iter().cloned().collect();
@@ -320,7 +320,7 @@ mod tests {
 
 	#[test]
 	fn share_change_plan_adds_new_nodes() {
-		let cluster_nodes: Vec<NodeId> = (0..3).map(|_| math::generate_random_point().unwrap().to_vec().as_ref().into()).collect();
+		let cluster_nodes: Vec<NodeId> = (0..3).map(|_| AsRef::<[u8]>::as_ref(&math::generate_random_point().unwrap().to_vec()).into()).collect();
 		let master = cluster_nodes[0].clone();
 		let old_key_version_owners = cluster_nodes[0..2].iter().cloned().collect();
 		let new_nodes_set = cluster_nodes.iter().cloned().collect();

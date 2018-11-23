@@ -1289,7 +1289,7 @@ pub mod tests {
 
 	pub fn all_connections_established(cluster: &Arc<ClusterCore>) -> bool {
 		cluster.config().key_server_set.snapshot().new_set.keys()
-			.filter(|p| *p != &Into::<NodeId>::into(cluster.config().self_key_pair.public().to_vec().as_ref()))
+			.filter(|p| *p != &Into::<NodeId>::into(AsRef::<[u8]>::as_ref(&cluster.config().self_key_pair.public().to_vec())))
 			.all(|p| cluster.connection(p).is_some())
 	}
 

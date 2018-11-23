@@ -41,8 +41,8 @@ pub fn generate_document_key(account_public: Public, server_key_public: Public) 
 		.map_err(errors::encryption)?;
 
 	Ok(EncryptedDocumentKey {
-		common_point: common_point.to_vec().as_ref().into(),
-		encrypted_point: encrypted_point.to_vec().as_ref().into(),
+		common_point: AsRef::<[u8]>::as_ref(&common_point.to_vec()).into(),
+		encrypted_point: AsRef::<[u8]>::as_ref(&encrypted_point.to_vec()).into(),
 		encrypted_key: encrypted_key.into(),
 	})
 }
@@ -87,7 +87,7 @@ pub fn decrypt_document(key: Bytes, mut encrypted_document: Bytes) -> Result<Byt
 /// Decrypt document given secret shadow.
 pub fn decrypt_document_with_shadow(decrypted_secret: Public, common_point: Public, shadows: Vec<Secret>, encrypted_document: Bytes) -> Result<Bytes, Error> {
 	let key = decrypt_with_shadow_coefficients(decrypted_secret, common_point, shadows)?;
-	decrypt_document(key.to_vec().as_ref().into(), encrypted_document)
+	decrypt_document(AsRef::<[u8]>::as_ref(&key.to_vec()).into(), encrypted_document)
 }
 
 /// Calculate Keccak(ordered servers set)

@@ -237,7 +237,7 @@ impl HostInfo {
 	}
 
 	pub(crate) fn id(&self) -> NodeId {
-		H512::from(self.keys.public().to_vec().as_ref())
+		H512::from(AsRef::<[u8]>::as_ref(&self.keys.public().to_vec()))
 	}
 }
 

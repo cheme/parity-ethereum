@@ -76,13 +76,13 @@ impl Deref for Secret {
 
 impl Into<H512> for Public {
 	fn into(self) -> H512 {
-		self.inner.to_vec().as_ref().into()
+		AsRef::<[u8]>::as_ref(&self.inner.to_vec()).into()
 	}
 }
 
 impl<'a> Into<H512> for &'a Public {
 	fn into(self) -> H512 {
-		self.inner.to_vec().as_ref().into()
+		AsRef::<[u8]>::as_ref(&self.inner.to_vec()).into()
 	}
 }
 
