@@ -12,3 +12,7 @@ tiny-keccak = "1.4"
 
 [dev-dependencies]
 tempdir = "0.3"
+
+[features]
+default = ["in-memory"]
+in-memory = []
