@@ -1175,7 +1175,7 @@ impl miner::MinerService for Miner {
 	fn chain_new_blocks<C>(&self, chain: &C, imported: &[H256], _invalid: &[H256], enacted: &[H256], retracted: &[H256], is_internal_import: bool)
 		where C: miner::BlockChainClient,
 	{
-		trace!(target: "miner", "chain_new_blocks");
+		trace!(metric: a_int_counter, target: "miner", "chain_new_blocks");
 
 		// 1. We ignore blocks that were `imported` unless resealing on new uncles is enabled.
 		// 2. We ignore blocks that are `invalid` because it doesn't have any meaning in terms of the transactions that
