@@ -1,0 +1,19 @@
+[package]
+name = "metrics"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+publish = false
+repository = "https://github.com/paritytech/parity-ethereum"
+description = "Metrics backends definition"
+license = "GPL-3.0"
+
+[dependencies.metrics-backends]
+#git = "https://github.com/cheme/parity-common"
+path = "../../../../parity-common/metrics-backends"
+#branch = "metricspoc"
+default-features = false
+features = ["pro", "slogger"]
+
+[features]
+default = ["std"]
+std = ["metrics-backends/std"]

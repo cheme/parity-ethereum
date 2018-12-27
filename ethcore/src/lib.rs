@@ -13,7 +13,7 @@
 
 // You should have received a copy of the GNU General Public License
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
-
+#![feature(proc_macro_hygiene)]
 #![warn(missing_docs)]
 
 //! Ethcore library
@@ -127,7 +127,9 @@ extern crate ethabi_contract;
 #[macro_use]
 extern crate error_chain;
 #[macro_use]
-extern crate metrics_poc;
+extern crate log;
+#[macro_use]
+extern crate metrics;
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
