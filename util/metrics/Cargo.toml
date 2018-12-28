@@ -12,7 +12,7 @@ license = "GPL-3.0"
 path = "../../../../parity-common/metrics-backends"
 #branch = "metricspoc"
 default-features = false
-features = ["pro", "slogger"]
+features = ["pro", "slogger", "enable_timer"]
 
 [features]
 default = ["std"]

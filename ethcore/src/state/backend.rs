@@ -90,6 +90,7 @@ impl ProofCheck {
 
 impl HashDB<KeccakHasher, DBValue> for ProofCheck {
 	fn keys(&self) -> HashMap<H256, i32> { self.0.keys() }
+  
 	fn get(&self, key: &H256) -> Option<DBValue> {
 		self.0.get(key)
 	}

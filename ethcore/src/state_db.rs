@@ -153,6 +153,7 @@ impl StateDB {
 		}
 	}
 
+  #[timer_enclose(statedb_load_bloom)]
 	/// Loads accounts bloom from the database
 	/// This bloom is used to handle request for the non-existant account fast
 	pub fn load_bloom(db: &KeyValueDB) -> Bloom {
@@ -181,6 +182,7 @@ impl StateDB {
 		bloom
 	}
 
+  #[timer_enclose(statedb_commit_bloom)]
 	/// Commit blooms journal to the database transaction
 	pub fn commit_bloom(batch: &mut DBTransaction, journal: BloomJournal) -> io::Result<()> {
 		assert!(journal.hash_functions <= 255);
@@ -196,6 +198,7 @@ impl StateDB {
 		Ok(())
 	}
 
+  #[timer_enclose(statedb_journal_under)]
 	/// Journal all recent operations under the given era and ID.
 	pub fn journal_under(&mut self, batch: &mut DBTransaction, now: u64, id: &H256) -> io::Result<u32> {
 		{
@@ -214,6 +217,7 @@ impl StateDB {
 		self.db.mark_canonical(batch, end_era, canon_id)
 	}
 
+  #[timer_enclose(statedb_sync_cache)]
 	/// Propagate local cache into the global cache and synchonize
 	/// the global cache with the best block state.
 	/// This function updates the global cache by removing entries
@@ -356,6 +360,7 @@ impl StateDB {
 		self.db.is_pruned()
 	}
 
+  #[timer_enclose(statedb_mem_used)]
 	/// Heap size used.
 	pub fn mem_used(&self) -> usize {
 		// TODO: account for LRU-cache overhead; this is a close approximation.
@@ -376,6 +381,7 @@ impl StateDB {
 		self.cache_size
 	}
 
+  #[timer_enclose(statedb_is_allowed)]
 	/// Check if the account can be returned from cache by matching current block parent hash against canonical
 	/// state and filtering out account modified in later blocks.
 	fn is_allowed(addr: &Address, parent_hash: &Option<H256>, modifications: &VecDeque<BlockChanges>) -> bool {
@@ -418,6 +424,7 @@ impl state::Backend for StateDB {
 		self.db.as_hashdb_mut()
 	}
 
+  #[timer_enclose(statedb_cach_account)]
 	fn add_to_account_cache(&mut self, addr: Address, data: Option<Account>, modified: bool) {
 		self.local_cache.push(CacheQueueItem {
 			address: addr,
@@ -426,12 +433,14 @@ impl state::Backend for StateDB {
 		})
 	}
 
+  #[timer_enclose(statedb_cach_code)]
 	fn cache_code(&self, hash: H256, code: Arc<Vec<u8>>) {
 		let mut cache = self.code_cache.lock();
 
 		cache.insert(hash, code);
 	}
 
+  #[timer_enclose(statedb_get_cached_account)]
 	fn get_cached_account(&self, addr: &Address) -> Option<Option<Account>> {
 		let mut cache = self.account_cache.lock();
 		if !Self::is_allowed(addr, &self.parent_hash, &cache.modifications) {
@@ -440,6 +449,7 @@ impl state::Backend for StateDB {
 		cache.accounts.get_mut(addr).map(|a| a.as_ref().map(|a| a.clone_basic()))
 	}
 
+  #[timer_enclose(statedb_get_cached)]
 	fn get_cached<F, U>(&self, a: &Address, f: F) -> Option<U>
 		where F: FnOnce(Option<&mut Account>) -> U {
 		let mut cache = self.account_cache.lock();
@@ -449,6 +459,7 @@ impl state::Backend for StateDB {
 		cache.accounts.get_mut(a).map(|c| f(c.as_mut()))
 	}
 
+  #[timer_enclose(statedb_get_cached_code)]
 	fn get_cached_code(&self, hash: &H256) -> Option<Arc<Vec<u8>>> {
 		let mut cache = self.code_cache.lock();
 

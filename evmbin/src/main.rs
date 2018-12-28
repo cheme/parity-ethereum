@@ -34,6 +34,8 @@ extern crate vm;
 extern crate evm;
 extern crate panic_hook;
 extern crate env_logger;
+#[macro_use]
+extern crate metrics;
 
 #[cfg(test)]
 #[macro_use]
@@ -102,6 +104,18 @@ fn main() {
 	panic_hook::set_abort();
 	env_logger::init();
 
+  // TODO refactor that (net even plugged (just for an idea of init from command line)).
+  let metrics_conf = metrics::metrics_backends::GlobalCommonDef {
+    dest: metrics::metrics_backends::OutputDest::File(None),
+    out_mode: metrics::metrics_backends::OutputMode::Overwrite,
+    out_delay: metrics::metrics_backends::OutputDelay::Periodic(std::time::Duration::from_secs(10)),
+    out_onclose: true,
+    chan_write: false,
+  };
+
+  // TODO return error
+  metrics::init(&metrics_conf);
+
 	let args: Args = Docopt::new(USAGE).and_then(|d| d.deserialize()).unwrap_or_else(|e| e.exit());
 
 	if args.cmd_state_test {
@@ -121,6 +135,8 @@ fn main() {
 	} else {
 		run_call(args, display::simple::Informant::default())
 	}
+
+  metrics::flush();
 }
 
 fn run_stats_jsontests_vm(args: Args) {

@@ -138,3 +138,7 @@ members = [
 	"util/patricia-trie-ethereum",
 	"util/fastmap",
 ]
+
+[patch.crates-io]
+kvdb-memorydb = { path = '../../parity-common2/kvdb-memorydb' }
+kvdb = { path = '../../parity-common2/kvdb' }

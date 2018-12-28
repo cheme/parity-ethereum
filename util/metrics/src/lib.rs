@@ -22,13 +22,25 @@
 pub extern crate metrics_backends;
 
 pub use metrics_backends::*;
-pub use metrics_backends::metrics_derive::{
-	metrics_modules,
-};
+pub use metrics_backends::metrics_derive::*;
 
 #[metrics_modules(pro,slogger)]
 struct MetricStates {
 	a_int_counter: Counter,
+  insert_timer: Timer,
+  get_timer: Timer,
+  statedb_load_bloom: Timer,
+  statedb_commit_bloom: Timer,
+  statedb_journal_under: Timer,
+  statedb_sync_cache: Timer,
+  statedb_mem_used: Timer,
+  statedb_is_allowed: Timer,
+  statedb_get_cached_account: Timer,
+  statedb_get_cached_code: Timer,
+  statedb_get_cached: Timer,
+  statedb_cach_account: Timer,
+  statedb_cach_code: Timer,
+  statedb_cach: Timer,
 }
 
 #[macro_export]
@@ -39,4 +51,18 @@ macro_rules! mets {
 	($($exp:tt)*) => {
 		$crate::metrics_backends::metrics_derive::metrics!(from_crate(metrics) [pro, slogger], $($exp)*)
 	};
+}
+
+#[macro_export]
+macro_rules! timer_enclose_backends {
+  ($($exp:tt)*) => {
+    $crate::metrics_backends::metrics_derive::metrics!(from_crate(metrics) [pro], $($exp)*)
+  };
+}
+
+#[macro_export]
+macro_rules! timer_enclose_backends_alt {
+  ($($exp:tt)*) => {
+    $crate::metrics_backends::metrics_derive::metrics!(from_crate(metrics) [pro, slogger], $($exp)*)
+  };
 }
