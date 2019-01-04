@@ -16,9 +16,6 @@
 
 //! Metrics for parity ethereum executables
 
-//#![nightly]
-#![feature(proc_macro_hygiene)] // TODO proc_macro_hack ? or revert to xtra verbose std macro
-
 pub extern crate metrics_backends;
 
 pub use metrics_backends::*;
@@ -46,23 +43,23 @@ struct MetricStates {
 #[macro_export]
 macro_rules! mets {
 	(fast_only, $($exp:tt)*) => {
-		$crate::metrics_backends::metrics_derive::metrics!(from_crate(metrics) [pro], $($exp)*)
+		$crate::metrics_backends::metrics!(from_crate($crate) [pro], $($exp)*)
 	};
 	($($exp:tt)*) => {
-		$crate::metrics_backends::metrics_derive::metrics!(from_crate(metrics) [pro, slogger], $($exp)*)
+		$crate::metrics_backends::metrics!(from_crate($crate) [pro, slogger], $($exp)*)
 	};
 }
 
 #[macro_export]
 macro_rules! timer_enclose_backends {
   ($($exp:tt)*) => {
-    $crate::metrics_backends::metrics_derive::metrics!(from_crate(metrics) [pro], $($exp)*)
+    $crate::metrics_backends::metrics!(from_crate($crate) [pro], $($exp)*)
   };
 }
 
 #[macro_export]
 macro_rules! timer_enclose_backends_alt {
   ($($exp:tt)*) => {
-    $crate::metrics_backends::metrics_derive::metrics!(from_crate(metrics) [pro, slogger], $($exp)*)
+    $crate::metrics_backends::metrics!(from_crate($crate) [pro, slogger], $($exp)*)
   };
 }
