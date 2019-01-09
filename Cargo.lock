@@ -2068,16 +2068,17 @@ dependencies = [
 name = "metrics"
 version = "0.1.0"
 dependencies = [
- "metrics-backends 0.1.0",
+ "metrics-backends 0.1.0 (git+https://github.com/cheme/parity-common?branch=metricspoc)",
 ]
 
 [[package]]
 name = "metrics-backends"
 version = "0.1.0"
+source = "git+https://github.com/cheme/parity-common?branch=metricspoc#c09a27f4016e6671b428170da7de8da46c8724f8"
 dependencies = [
  "failure 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "metrics-procedural 0.1.0",
+ "metrics-procedural 0.1.0 (git+https://github.com/cheme/parity-common?branch=metricspoc)",
  "once_cell 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "parking_lot 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "prometheus 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2089,6 +2090,7 @@ dependencies = [
 [[package]]
 name = "metrics-procedural"
 version = "0.1.0"
+source = "git+https://github.com/cheme/parity-common?branch=metricspoc#c09a27f4016e6671b428170da7de8da46c8724f8"
 dependencies = [
  "proc-macro2 0.4.24 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 0.6.10 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -4621,6 +4623,8 @@ dependencies = [
 "checksum memoffset 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "0f9dc261e2b62d7a622bf416ea3c5245cdd5d9a7fcc428c0d06804dfce1775b3"
 "checksum memory_units 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "71d96e3f3c0b6325d8ccd83c33b28acb183edcb6c67938ba104ec546854b0882"
 "checksum memorydb 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "e143fbad9f90d2158bca3c4b09015276a6de6f085a77088943901cb26828780f"
+"checksum metrics-backends 0.1.0 (git+https://github.com/cheme/parity-common?branch=metricspoc)" = "<none>"
+"checksum metrics-procedural 0.1.0 (git+https://github.com/cheme/parity-common?branch=metricspoc)" = "<none>"
 "checksum mime 0.3.12 (registry+https://github.com/rust-lang/crates.io-index)" = "0a907b83e7b9e987032439a387e187119cddafc92d5c2aaeb1d92580a793f630"
 "checksum mime_guess 2.0.0-alpha.6 (registry+https://github.com/rust-lang/crates.io-index)" = "30de2e4613efcba1ec63d8133f344076952090c122992a903359be5a4f99c3ed"
 "checksum mio 0.6.16 (registry+https://github.com/rust-lang/crates.io-index)" = "71646331f2619b1026cc302f87a2b8b648d5c6dd6937846a16cc8ce0f347f432"

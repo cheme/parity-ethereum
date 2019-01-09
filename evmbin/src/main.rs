@@ -107,10 +107,10 @@ fn main() {
   // TODO refactor that (net even plugged (just for an idea of init from command line)).
   let metrics_conf = metrics::metrics_backends::GlobalCommonDef {
     dest: metrics::metrics_backends::OutputDest::File(None),
-    out_mode: metrics::metrics_backends::OutputMode::Overwrite,
+    //out_mode: metrics::metrics_backends::OutputMode::Overwrite,
     out_delay: metrics::metrics_backends::OutputDelay::Periodic(std::time::Duration::from_secs(10)),
-    out_onclose: true,
-    chan_write: false,
+    //out_onclose: true,
+    //chan_write: false,
   };
 
   // TODO return error
