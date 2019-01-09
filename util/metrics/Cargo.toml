@@ -8,9 +8,9 @@ description = "Metrics backends definition"
 license = "GPL-3.0"
 
 [dependencies.metrics-backends]
-#git = "https://github.com/cheme/parity-common"
-path = "../../../../parity-common/metrics-backends"
-#branch = "metricspoc"
+git = "https://github.com/cheme/parity-common"
+#path = "../../../../parity-common/metrics-backends"
+branch = "metricspoc"
 default-features = false
 features = ["pro", "slogger", "enable_timer"]
 
