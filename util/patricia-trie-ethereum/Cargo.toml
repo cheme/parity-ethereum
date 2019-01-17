@@ -13,7 +13,11 @@ rlp = "0.3.0"
 parity-bytes = "0.1"
 ethereum-types = "0.4"
 elastic-array = "0.10"
+kvdb = { version = "0.1" } #, path = "../kvdb" }
+kvdb-rocksdb = "0.1.4"
+rkv = "0.7.0"
 
+memorydb = { version = "0.3.0" }#, path = "../memorydb", default-features = false }
 [dev-dependencies]
 memorydb = "0.3.0"
 keccak-hash = "0.1.2"

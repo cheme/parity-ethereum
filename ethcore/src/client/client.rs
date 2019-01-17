@@ -1143,7 +1143,7 @@ impl Client {
 
 	/// Take a snapshot at the given block.
 	/// If the ID given is "latest", this will default to 1000 blocks behind.
-	pub fn take_snapshot<W: snapshot_io::SnapshotWriter + Send>(&self, writer: W, at: BlockId, p: &snapshot::Progress) -> Result<(), EthcoreError> {
+	pub fn take_snapshot<W: snapshot_io::SnapshotWriter + Send>(&self, writer: W, writer2: W, at: BlockId, p: &snapshot::Progress) -> Result<(), EthcoreError> {
 		let db = self.state_db.read().journal_db().boxed_clone();
 		let best_block_number = self.chain_info().best_block_number;
 		let block_number = self.block_number(at).ok_or(snapshot::Error::InvalidStartingBlock(at))?;
@@ -1174,6 +1174,7 @@ impl Client {
 
 		let processing_threads = self.config.snapshot.processing_threads;
 		snapshot::take_snapshot(&*self.engine, &self.chain.read(), start_hash, db.as_hashdb(), writer, p, processing_threads)?;
+		snapshot::take_snapshot2(&*self.engine, &self.chain.read(), start_hash, db.as_hashdb(), writer2, p, processing_threads)?;
 
 		Ok(())
 	}

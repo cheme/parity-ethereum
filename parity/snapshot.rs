@@ -242,7 +242,10 @@ impl SnapshotCommand {
 	/// Take a snapshot from the head of the chain.
 	pub fn take_snapshot(self) -> Result<(), String> {
 		let file_path = self.file_path.clone().ok_or("No file path provided.".to_owned())?;
+		let file_path_2 = self.file_path.clone().ok_or("No file path provided.".to_owned())?;
 		let file_path: PathBuf = file_path.into();
+    let mut file_path_2: PathBuf = file_path_2.into();
+    file_path_2.set_extension("exp");
 		let block_at = self.block_at;
 		let service = self.start_service()?;
 
@@ -251,6 +254,8 @@ impl SnapshotCommand {
 		let writer = PackedWriter::new(&file_path)
 			.map_err(|e| format!("Failed to open snapshot writer: {}", e))?;
 
+		let writer2 = PackedWriter::new(&file_path_2)
+			.map_err(|e| format!("Failed to open trie writer: {}", e))?;
 		let progress = Arc::new(Progress::default());
 		let p = progress.clone();
 		let informant_handle = ::std::thread::spawn(move || {
@@ -269,10 +274,16 @@ impl SnapshotCommand {
 			}
  		});
 
-		if let Err(e) = service.client().take_snapshot(writer, block_at, &*progress) {
+		if let Err(e) = service.client().take_snapshot(writer, writer2, block_at, &*progress) {
 			let _ = ::std::fs::remove_file(&file_path);
+			let _ = ::std::fs::remove_file(&file_path_2);
 			return Err(format!("Encountered fatal error while creating snapshot: {}", e));
 		}
+/*		if let Err(e) = service.client().take_snapshot2(writer2, block_at, &*progress) {
+			let _ = ::std::fs::remove_file(&file_path);
+			return Err(format!("Encountered fatal error while creating trie snapshot: {}", e));
+		}*/
+
 
 		info!("snapshot creation complete");
 

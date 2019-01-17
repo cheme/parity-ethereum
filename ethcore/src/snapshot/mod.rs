@@ -44,6 +44,7 @@ use ethtrie::{TrieDB, TrieDBMut};
 use rlp::{RlpStream, Rlp};
 use bloom_journal::Bloom;
 use num_cpus;
+use trie::TrieDBIteratorTerm;
 
 use self::io::SnapshotWriter;
 
@@ -181,11 +182,9 @@ pub fn take_snapshot<W: SnapshotWriter + Send>(
 			let state_guard = scope.spawn(move || -> Result<Vec<H256>, Error> {
 				let mut chunk_hashes = Vec::new();
 
-				for part in (thread_idx..SNAPSHOT_SUBPARTS).step_by(num_threads) {
-					debug!(target: "snapshot", "Chunking part {} in thread {}", part, thread_idx);
-					let mut hashes = chunk_state(state_db, &state_root, writer, p, Some(part))?;
+					debug!(target: "snapshot", "Chunking npart in thread {}", thread_idx);
+					let mut hashes = chunk_state(state_db, &state_root, writer, p, None)?;
 					chunk_hashes.append(&mut hashes);
-				}
 
 				Ok(chunk_hashes)
 			});
@@ -222,6 +221,81 @@ pub fn take_snapshot<W: SnapshotWriter + Send>(
 	Ok(())
 }
 
+/// experimentation
+pub fn take_snapshot2<W: SnapshotWriter + Send>(
+	engine: &EthEngine,
+	chain: &BlockChain,
+	block_at: H256,
+	state_db: &HashDB<KeccakHasher, DBValue>,
+	writer: W,
+	p: &Progress,
+	processing_threads: usize,
+) -> Result<(), Error> {
+	let start_header = chain.block_header_data(&block_at)
+		.ok_or(Error::InvalidStartingBlock(BlockId::Hash(block_at)))?;
+	let state_root = start_header.state_root();
+	let number = start_header.number();
+
+	info!("Taking snapshot starting at block {}", number);
+
+	let writer = Mutex::new(writer);
+	let chunker = engine.snapshot_components().ok_or(Error::SnapshotsUnsupported)?;
+	let snapshot_version = chunker.current_version();
+	let (state_hashes, block_hashes) = scope(|scope| -> Result<(Vec<H256>, Vec<H256>), Error> {
+		let writer = &writer;
+		let block_guard = scope.spawn(move || chunk_secondary(chunker, chain, block_at, writer, p));
+
+		// The number of threads must be between 1 and SNAPSHOT_SUBPARTS
+		assert!(processing_threads >= 1, "Cannot use less than 1 threads for creating snapshots");
+		let num_threads: usize = cmp::min(processing_threads, SNAPSHOT_SUBPARTS);
+		info!(target: "snapshot", "Using {} threads for Snapshot creation.", num_threads);
+
+		let mut state_guards = Vec::with_capacity(num_threads as usize);
+
+		for thread_idx in 0..num_threads {
+			let state_guard = scope.spawn(move || -> Result<Vec<H256>, Error> {
+				let mut chunk_hashes = Vec::new();
+
+  			info!(target: "snapshot", "Chunking 2 in thread {}", thread_idx);
+				let mut hashes = chunk_state2(state_db, &state_root, writer, p, None)?;
+				chunk_hashes.append(&mut hashes);
+
+				Ok(chunk_hashes)
+			});
+			state_guards.push(state_guard);
+		}
+
+		let block_hashes = block_guard.join().expect("Sub-thread never panics; qed")?;
+		let mut state_hashes = Vec::new();
+
+		for guard in state_guards {
+			let part_state_hashes = guard.join().expect("Sub-thread never panics; qed")?;
+			state_hashes.extend(part_state_hashes);
+		}
+
+		debug!(target: "snapshot", "Took a snapshot of {} accounts", p.accounts.load(Ordering::SeqCst));
+		Ok((state_hashes, block_hashes))
+	})?;
+
+	info!(target: "snapshot", "produced {} state chunks and no block chunks.", state_hashes.len());
+
+	let manifest_data = ManifestData {
+		version: snapshot_version,
+		state_hashes: state_hashes,
+		block_hashes: block_hashes,
+		state_root: state_root,
+		block_number: number,
+		block_hash: block_at,
+	};
+
+	writer.into_inner().finish(manifest_data)?;
+
+	p.done.store(true, Ordering::SeqCst);
+
+	Ok(())
+}
+
+
 /// Create and write out all secondary chunks to disk, returning a vector of all
 /// the hashes of secondary chunks created.
 ///
@@ -240,7 +314,7 @@ pub fn chunk_secondary<'a>(mut chunker: Box<SnapshotComponents>, chain: &'a Bloc
 			let size = compressed.len();
 
 			writer.lock().write_block_chunk(hash, compressed)?;
-			trace!(target: "snapshot", "wrote secondary chunk. hash: {:x}, size: {}, uncompressed size: {}",
+			info!(target: "snapshot", "wrote secondary chunk. hash: {:x}, size: {}, uncompressed size: {}",
 				hash, size, raw_data.len());
 
 			progress.size.fetch_add(size, Ordering::SeqCst);
@@ -329,7 +403,7 @@ pub fn chunk_state<'a>(db: &HashDB<KeccakHasher, DBValue>, root: &H256, writer: 
 		rlps: Vec::new(),
 		cur_size: 0,
 		snappy_buffer: vec![0; snappy::max_compressed_len(PREFERRED_CHUNK_SIZE)],
-		writer: writer,
+		writer,
 		progress: progress,
 	};
 
@@ -355,7 +429,7 @@ pub fn chunk_state<'a>(db: &HashDB<KeccakHasher, DBValue>, root: &H256, writer: 
 	}
 
 	for item in account_iter {
-		let (account_key, account_data) = item?;
+		let (account_key, account_data): (Vec<u8>, DBValue) = item?;
 		let account_key_hash = H256::from_slice(&account_key);
 
 		if seek_to.map_or(false, |seek_to| account_key[0] >= seek_to) {
@@ -380,6 +454,68 @@ pub fn chunk_state<'a>(db: &HashDB<KeccakHasher, DBValue>, root: &H256, writer: 
 
 	Ok(chunker.hashes)
 }
+
+/// experimentation
+pub fn chunk_state2<'a>(db: &HashDB<KeccakHasher, DBValue>, root: &H256, writer: &Mutex<SnapshotWriter + 'a>, progress: &'a Progress, part: Option<usize>) -> Result<Vec<H256>, Error> {
+	let account_trie = TrieDB::new(db, &root)?;
+
+	let mut chunker = StateChunker {
+		hashes: Vec::new(),
+		rlps: Vec::new(),
+		cur_size: 0,
+		snappy_buffer: vec![0; snappy::max_compressed_len(PREFERRED_CHUNK_SIZE)],
+		writer,
+		progress: progress,
+	};
+
+	let mut used_code = HashSet::new();
+
+	// account_key here is the address' hash.
+	let mut account_iter = account_trie.iter_term()?;
+
+/*	let mut seek_to = None;
+
+	if let Some(part) = part {
+		assert!(part < 16, "Wrong chunk state part number (must be <16) in snapshot creation.");
+
+		let part_offset = MAX_SNAPSHOT_SUBPARTS / SNAPSHOT_SUBPARTS;
+		let mut seek_from = vec![0; 32];
+		seek_from[0] = (part * part_offset) as u8;
+		account_iter.seek(&seek_from)?;
+
+		// Set the upper-bound, except for the last part
+		if part < SNAPSHOT_SUBPARTS - 1 {
+			seek_to = Some(((part + 1) * part_offset) as u8)
+		}
+	}*/
+
+	for item in account_iter {
+		let (account_key, account_data): (Vec<u8>, DBValue) = item?;
+		let account_key_hash = H256::from_slice(&account_key);
+
+/*		if seek_to.map_or(false, |seek_to| account_key[0] >= seek_to) {
+			break;
+		}*/
+
+		let account = ::rlp::decode(&*account_data)?;
+		let account_db = AccountDB::from_hash(db, account_key_hash);
+
+		let fat_rlps = account::to_fat_rlps(&account_key_hash, &account, &account_db, &mut used_code, PREFERRED_CHUNK_SIZE - chunker.chunk_size(), PREFERRED_CHUNK_SIZE)?;
+		for (i, fat_rlp) in fat_rlps.into_iter().enumerate() {
+			if i > 0 {
+				chunker.write_chunk()?;
+			}
+			chunker.push(fat_rlp)?;
+		}
+	}
+
+	if chunker.cur_size != 0 {
+		chunker.write_chunk()?;
+	}
+
+	Ok(chunker.hashes)
+}
+
 
 /// Used to rebuild the state trie piece by piece.
 pub struct StateRebuilder {

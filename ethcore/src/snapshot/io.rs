@@ -20,10 +20,11 @@
 //! Packed snapshots are written to a single file, and loose snapshots are
 //! written to multiple files in one directory.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
+use trie::TrieDBIteratorTerm;
 
 use bytes::Bytes;
 use ethereum_types::H256;

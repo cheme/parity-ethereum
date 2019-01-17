@@ -134,3 +134,5 @@ members = [
 	"parity-clib",
 	"whisper/cli",
 ]
+#[patch.crates-io]
+#patricia-trie = { path = "../../parity-common/patricia_trie" }

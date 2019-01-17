@@ -23,11 +23,16 @@ extern crate ethereum_types;
 extern crate hashdb;
 extern crate keccak_hasher;
 extern crate rlp;
-
+extern crate kvdb;
+extern crate rkv;
+extern crate kvdb_rocksdb as rocksdb;
+extern crate memorydb;
 mod rlp_node_codec;
-
+use memorydb::MemoryDB;
+use trie::{TrieMut, Trie, DBValue, node::Node, NibbleSlice, NodeCodec};
+use hashdb::{HashDB, Hasher};
 pub use rlp_node_codec::RlpNodeCodec;
-
+use kvdb::KeyValueDB;
 use ethereum_types::H256;
 use keccak_hasher::KeccakHasher;
 use rlp::DecoderError;
@@ -131,3 +136,201 @@ pub type TrieFactory = trie::TrieFactory<KeccakHasher, RlpCodec>;
 pub type TrieError = trie::TrieError<H256, DecoderError>;
 /// Convenience type alias for Keccak/Rlp flavoured trie results
 pub type Result<T> = trie::Result<T, H256, DecoderError>;
+
+
+#[test]
+fn experimenttest() {
+  experiment()
+}
+
+/*#[test]
+fn depth() {
+let a: &[u8] = &[0, 11, 71, 140, 124, 136, 184, 231, 226, 44];
+let b: &[u8] = &[0, 11, 224, 137, 13, 168, 7, 67, 202, 151];
+assert_eq!(5, biggest_depth(&a[..],&b[..]));
+}*/
+// warn start at 1...
+fn biggest_depth(v1: &[u8], v2: &[u8]) -> usize {
+  for a in 0..v1.len() {
+    if v1[a] == v2[a] {
+    } else {
+      if v1[a] >> 4 ==  v2[a] >> 4 {
+        return a * 2 + 2;
+      } else {
+        return a * 2 + 1;
+      }
+    }
+  }
+  return 1;
+}
+fn flush_queue (ix: usize, 
+               target_depth: usize, 
+                val_queue: &[(Box<[u8]>,Box<[u8]>)], 
+                memdb: &MemoryDB::<KeccakHasher, DBValue>,
+                hashdb: &mut MemoryDB::<KeccakHasher, DBValue>,
+                nbelt: usize,
+                ) -> usize {
+    for i in 0..ix+1 {
+      let (ref k2,ref v2) = &val_queue[i]; 
+          let mut found = false;
+          let nkey = NibbleSlice::new_offset(&k2[..],target_depth).encoded(true);
+          let encoded = RlpNodeCodec::leaf_node(&nkey[..], &v2[..]);
+          let hash = hashdb.insert(&encoded[..]);
+          if memdb.contains(&hash) {
+            if nbelt < 30 {
+              println!("found a leaf {}, depth {}",nbelt, target_depth);
+              println!("k {:?}", &k2[..10]);
+            }
+          } else {
+            panic!("not a leaf {}", nbelt);
+          }
+
+/*          for depth in 0..64 { // or 65 ??
+            //let partial = NibbleSlice::new(&k2[..]);
+            let nkey = NibbleSlice::new_offset(&k2[..],depth).encoded(true);
+            //let ns = NibbleSlice::new_offset(&k2[..],32);
+            // leaf situation
+            //let leaf = Node::Leaf(ns, &v2[..]);
+            let encoded = RlpNodeCodec::leaf_node(&nkey[..], &v2[..]);
+            //let encoded = leaf.into_encoded(|node_handle| self.commit_child(node_handle) );
+            let hash = hashdb.insert(&encoded[..]);
+//						let encoded = leaf.into_encoded::<_, C, H>(|node_handle| self.commit_child(node_handle) );
+            if memdb.contains(&hash) {
+              //if nbelt < 30 {
+              println!("found a leaf {}, depth {}, calcdepth {}",nbelt, depth, target_depth);
+              println!("k {:?}", &k2[..10]);
+              //}
+              assert_eq!(depth, target_depth);
+              found = true;
+              break;
+            } else {
+          //    panic!("not a leaf {}", nbelt);
+            }
+          }
+          if !found {
+            panic!("not a leaf {}", nbelt);
+          }*/
+    }
+ 
+    return ix+1;
+  }
+
+pub enum ParseState {
+  Start,
+  // ix then depth
+  Depth(usize,usize),// no define depth and slice index of queue
+}
+// warn run on unmodified parity-common (branch is too hacky broken)
+fn experiment() {
+	let tempdirlmdb  = std::path::Path::new("./all2");
+    let mut env = rkv::Rkv::environment_builder();
+  env.set_map_size(10485760 * 2);
+let created_arc = rkv::Manager::singleton().write().unwrap()
+  .get_or_create(tempdirlmdb, |p|rkv::Rkv::from_env(p,env))
+  .unwrap()
+  ;
+let env = created_arc.read().unwrap();
+
+	let tempdir  = std::path::Path::new("orig");
+
+let store: rkv::Store = env.open_or_create_default().unwrap();
+
+
+	let config = rocksdb::DatabaseConfig::default();
+	let mut db = rocksdb::Database::open(&config, tempdir.to_str().unwrap()).unwrap();
+	let mut db: &mut dyn KeyValueDB = &mut db;
+  
+  let mut memdb = MemoryDB::<KeccakHasher, DBValue>::new();
+  let mut hashdb = MemoryDB::<KeccakHasher, DBValue>::new();
+
+  let root = {
+    let mut root = H256::new();
+    let mut t = TrieDBMut::new(&mut memdb, &mut root);
+    let mut nbelt = 0;
+    let mut writerlm = env.write().unwrap();
+    for (k, v) in db.iter(None) {
+      nbelt += 1;
+      t.insert(k[..].into(),v[..].into()).unwrap();
+      writerlm.put(store.clone(), k[..].to_vec(), &rkv::Value::Blob(&v[..])).unwrap();
+    }
+    writerlm.commit().unwrap();
+    t.root().clone()
+  };
+
+  let mut state = ParseState::Start;
+  let nv: (Box<[u8]>,Box<[u8]>) = (Box::new([]),Box::new([]));
+  let mut val_queue : Vec<(Box<[u8]>,Box<[u8]>)> = vec![nv.clone();16];
+  // compare iter ordering
+  {
+    let t = TrieDB::new(&memdb, &root);
+    let mut nbelt = 0;
+    let mut nbflush = 0;
+    let readerlm: rkv::Reader<Vec<u8>>  = env.read().unwrap();
+    let mut iterlm = readerlm.iter_start(store.clone()).unwrap();
+      for (k, v) in db.iter(None) {
+      nbelt += 1;
+      // TODO rkv api is not low level enough
+      if let Some((k2,Ok(Some(rkv::Value::Blob(v2))))) = iterlm.next() {
+
+        assert_eq!(&k[..],&k2[..]);
+        assert_eq!(&v[..],&v2[..]);
+        match state {
+          ParseState::Start => {
+            val_queue[0] = (k, v);
+            state = ParseState::Depth(0,0);
+          },
+          ParseState::Depth(ix, depth) => {
+            let common_depth = biggest_depth(&val_queue[ix].0[..], &k[..]);
+            if common_depth == depth {
+              val_queue[ix+1] = (k, v);
+              state = ParseState::Depth(ix+1, common_depth);
+            } else if common_depth > depth {
+              if ix == 0 {
+                // nothing
+              } else {
+                nbflush += flush_queue(ix - 1, depth, &val_queue[..], &memdb, &mut hashdb, nbelt);
+                // TODO rusty clone : unsafe that??
+                val_queue[0] = std::mem::replace(&mut val_queue[ix],nv.clone());
+              }
+              val_queue[1] = (k, v);
+              state = ParseState::Depth(1, common_depth);
+            } else if common_depth < depth {
+              nbflush += flush_queue(ix, depth, &val_queue[..], &memdb, &mut hashdb, nbelt);
+              val_queue[0] = (k, v);
+              state = ParseState::Depth(0, common_depth);
+            }
+          }
+        }
+//        panic!("{:?}, {:?}\n{:?}, {:?}", k, v, k2, v2);
+      } else {
+        panic!("{:?}, {:?}", k, v);
+      }
+
+    }
+    // pending
+    match state {
+      ParseState::Start => {
+        // nothing null root case
+      },
+      ParseState::Depth(ix, depth) => {
+        nbflush += flush_queue(ix, depth, &val_queue[..], &memdb, &mut hashdb, nbelt);
+      }
+    }
+
+    assert!(iterlm.next().is_none());
+    assert!(memdb.contains(&root));
+    panic!("ok eq: {:?}, {}, nbfl {}", nbelt, memdb.keys().len(), nbflush);
+ 
+  }
+	/*for &(ref key, ref value) in &x {
+		assert!(t.insert(key, value).unwrap().is_none());
+		assert_eq!(t.insert(key, value).unwrap(), Some(DBValue::from_slice(value)));
+	}
+
+	for (key, value) in x {
+		assert_eq!(t.remove(&key).unwrap(), Some(DBValue::from_slice(&value)));
+		assert!(t.remove(&key).unwrap().is_none());
+	}*/
+
+}
+

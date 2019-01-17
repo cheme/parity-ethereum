@@ -162,6 +162,7 @@ fn keep_ancient_blocks() {
 	// Temporary folders
 	let tempdir = TempDir::new("").unwrap();
 	let snapshot_path = tempdir.path().join("SNAP");
+	let snapshot_path2 = tempdir.path().join("SNAP2");
 
 	// Generate blocks
 	let gas_prices = vec![1.into(), 2.into(), 3.into(), 999.into()];
@@ -174,6 +175,7 @@ fn keep_ancient_blocks() {
 	// Create the Snapshot
 	let best_hash = bc.best_block_hash();
 	let writer = Mutex::new(PackedWriter::new(&snapshot_path).unwrap());
+	let writer2 = Mutex::new(TrieWriter::new(&snapshot_path).unwrap());
 	let block_hashes = chunk_secondary(
 		Box::new(SNAPSHOT_MODE),
 		&bc,
@@ -188,6 +190,7 @@ fn keep_ancient_blocks() {
 		state_db.as_hashdb(),
 		&state_root,
 		&writer,
+		&writer2,
 		&Progress::default(),
 		None
 	).unwrap();

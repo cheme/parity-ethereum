@@ -49,13 +49,15 @@ fn snap_and_restore() {
 
 	let tempdir = TempDir::new("").unwrap();
 	let snap_file = tempdir.path().join("SNAP");
+	let snap_file2 = tempdir.path().join("SNAP2");
 
 	let state_root = producer.state_root();
 	let writer = Mutex::new(PackedWriter::new(&snap_file).unwrap());
+	let writer2 = Mutex::new(TrieWriter::new(&snap_file).unwrap());
 
 	let mut state_hashes = Vec::new();
 	for part in 0..SNAPSHOT_SUBPARTS {
-		let mut hashes = chunk_state(&old_db, &state_root, &writer, &Progress::default(), Some(part)).unwrap();
+		let mut hashes = chunk_state(&old_db, &state_root, &writer, &writer2, &Progress::default(), Some(part)).unwrap();
 		state_hashes.append(&mut hashes);
 	}
 
@@ -164,11 +166,13 @@ fn checks_flag() {
 
 	let tempdir = TempDir::new("").unwrap();
 	let snap_file = tempdir.path().join("SNAP");
+	let snap_file = tempdir.path().join("SNAP2");
 
 	let state_root = producer.state_root();
 	let writer = Mutex::new(PackedWriter::new(&snap_file).unwrap());
+	let writer2 = Mutex::new(TrieWriter::new(&snap_file2).unwrap());
 
-	let state_hashes = chunk_state(&old_db, &state_root, &writer, &Progress::default(), None).unwrap();
+	let state_hashes = chunk_state(&old_db, &state_root, &writer, &writer2, &Progress::default(), None).unwrap();
 
 	writer.into_inner().finish(::snapshot::ManifestData {
 		version: 2,

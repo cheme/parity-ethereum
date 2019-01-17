@@ -476,9 +476,11 @@ impl Service {
 		let _ = fs::remove_dir_all(&temp_dir);
 
 		let writer = LooseWriter::new(temp_dir.clone())?;
+    unimplemented!("aab")
+/*		let writer = LooseWriter::new(temp_dir.clone())?;
 
 		let guard = Guard::new(temp_dir.clone());
-		let res = client.take_snapshot(writer, BlockId::Number(num), &self.progress);
+		let res = client.take_snapshot(writer, writer2, BlockId::Number(num), &self.progress);
 
 		self.taking_snapshot.store(false, Ordering::SeqCst);
 		if let Err(e) = res {
@@ -510,7 +512,7 @@ impl Service {
 		*reader = Some(LooseReader::new(snapshot_dir)?);
 
 		guard.disarm();
-		Ok(())
+		Ok(())*/
 	}
 
 	/// Initialize the restoration synchronously.
