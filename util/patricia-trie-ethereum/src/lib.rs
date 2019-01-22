@@ -176,6 +176,69 @@ fn nibble_at(v1: &[u8], ix: usize) -> u8 {
   }
 }
 
+// (64 * 16) aka 2*byte size of key * nb nibble value, 2 being byte/nible (8/4)
+// TODO test others layout
+// first usize to get nb of added value, second usize last added index
+struct CacheAccum (Vec<(Vec<CacheNode>, usize, usize)>);
+
+const DEPTH: usize = 64;
+const NIBBLE_SIZE: usize = 16;
+impl CacheAccum {
+  // TODO switch to static and bench
+  fn new() -> CacheAccum {
+    CacheAccum(vec![(vec![CacheNode::None; NIBBLE_SIZE],0,0); DEPTH])
+  }
+  fn get_node(&self, depth:usize, nibble_ix:usize) -> &CacheNode {
+    &self.0[depth].0[nibble_ix]
+  }
+  fn set_node(&mut self, depth:usize, nibble_ix:usize, node: CacheNode) {
+    self.0[depth].0[nibble_ix] = node;
+    // strong heuristic from the fact that we do not delete depth except globally
+    // and that we only check relevant size for 0 and 1 TODO replace counter by enum
+    // -> so we do not manage replace case
+    self.0[depth].1 += 1;
+    self.0[depth].2 = nibble_ix; // TODO bench a set if self.0[depth].1 is 0 (probably slower)
+  }
+  fn depth_added(&self, depth:usize) -> usize {
+    self.0[depth].1
+  }
+  fn depth_last_added(&self, depth:usize) -> usize {
+    self.0[depth].2
+  }
+
+  fn rem_node(&mut self, depth:usize, nibble:usize) -> CacheNode {
+    self.0[depth].1 -= 1;
+    self.0[depth].2 = NIBBLE_SIZE; // out of ix -> need to check all value in this case TODO optim it ??
+    std::mem::replace(&mut self.0[depth].0[nibble], CacheNode::None)
+  }
+  fn reset_depth(&mut self, depth:usize) {
+    self.0[depth] = (vec![CacheNode::None; NIBBLE_SIZE], 0, 0);
+  }
+}
+
+// TODO try split struct
+#[derive(Clone)]
+enum CacheNode {
+  None,
+  Hash(H256),
+  Ext(Vec<u8>,H256),// vec<u8> for nibble slice is not super good looking): TODO bench diff if explicitely boxed
+}
+impl CacheNode {
+  // unsafe accessors TODO bench diff with safe one
+  fn hash(self) -> H256 {
+    if let CacheNode::Hash(h) = self {
+      return h
+    }
+    unreachable!()
+  }
+  fn ext(self) -> (Vec<u8>,H256) {
+    if let CacheNode::Ext(n,h) = self {
+      return (n,h)
+    }
+    unreachable!()
+  }
+}
+
 fn flush_branch (
   ref_branch: Box<[u8]>,
   new_depth: usize, 
@@ -183,7 +246,7 @@ fn flush_branch (
   memdb: &MemoryDB::<KeccakHasher, DBValue>,
   hashdb: &mut MemoryDB::<KeccakHasher, DBValue>,
   nbelt: usize,
-  depth_queue : &mut Vec<Vec<H256>>, //(64 * 16 size) 
+  depth_queue : &mut CacheAccum, //(64 * 16 size) 
 ) -> usize {
       if nbelt < 20 {
 println!("t{}-{}", old_depth, new_depth);
@@ -199,18 +262,9 @@ println!("ti{}", d);
  
     // check if branch empty TODO switch to optional storage
     let mut empty = true;
-    let mut unit: usize = 16;
-    for i in 0..16 {
-      if &H256::new()[..]!= &depth_queue[d][i][..] {
-        empty = false;
-        if unit > 15 {
-          unit = i;
-        } else {
-          unit = 16;
-          break;
-        }
-      }
-    }
+    let depth_size = depth_queue.depth_added(d);
+    if depth_size == 1 {
+      let unit = depth_queue.depth_last_added(d);
 
 /*    if empty {
       // check extension cache
@@ -218,7 +272,6 @@ println!("ti{}", d);
 
       }
     }*/
-    if unit < 16 {
       /*// TODO check extension cache to invalidate unit
       if unimplemented!() {
         // TODO fill extension cache!! + nibble
@@ -233,9 +286,9 @@ println!("ti{}", d);
 //        let nibble: u8 = nibble_at(&ref_branch[..],d-1);
  //       let nibl = NibbleSlice::new_offset(&ref_branch[..], d);
  //           let partial = nibl.encoded_leftmost(d-dp, false);
-            let v_hash: H256 = depth_queue[d][unit].clone();
+//            let v_hash: H256 = depth_queue.get_node(d,unit).clone().hash();
+            let v_hash:H256 = depth_queue.rem_node(d, unit).hash(); // TODO use mem replace avoid copy
             let v_hashd = v_hash.clone();
-            depth_queue[d][unit] = H256::new(); // TODO use mem replace avoid copy
             // TODO extension
             let encoded = RlpNodeCodec::ext_node(&[16 + unit as u8], trie::ChildReference::Hash(v_hash));
             let hash = hashdb.insert(&encoded[..]);
@@ -243,7 +296,7 @@ println!("ti{}", d);
             if valid {
               // put to parent (TODO put to cache)
               let nibble: u8 = nibble_at(&ref_branch[..],d-1);
-              depth_queue[d-1][nibble as usize] = hash;
+              depth_queue.set_node(d-1, nibble as usize, CacheNode::Ext(vec![nibble], hash));
             } else {
             /*  let v = memdb.get(&v_hashd).unwrap();
 
@@ -254,11 +307,20 @@ println!("ti{}", d);
        
       }
     }
-    if !empty && unit > 15 {
+    if depth_size > 1 {
     	//fn branch_node<I>(children: Iterator<H256>, value: Option<ElasticArray128<u8>>) -> Vec<u8>
       // TODO encode on buffer struct (do not stick to existing one)
-      let encoded = RlpNodeCodec::branch_node(depth_queue[d].iter().map(|v| if v == &H256::new() { None } else {Some(trie::ChildReference::Hash(v.clone()))}), None);
-      depth_queue[d] = vec![H256::new();16];
+      let encoded = RlpNodeCodec::branch_node(
+        depth_queue.0[d].0.iter().map(|v| 
+          match v {
+            CacheNode::None => None,
+            CacheNode::Hash(ref h) => Some(trie::ChildReference::Hash(h.clone())), // TODO try rem clone
+            CacheNode::Ext(_, ref h) => Some(trie::ChildReference::Hash(h.clone())), // TODO try rem clone,
+          }
+        ), None);
+
+        
+      depth_queue.reset_depth(d);
       /*let dec : Node = RlpNodeCodec::decode(&encoded[..]).unwrap();
       println!("{:?}", dec);
       panic!("d");*/
@@ -267,8 +329,8 @@ println!("ti{}", d);
       // clear tmp val
       // put hash in parent
       if d > 0 {
-      let nibble: u8 = nibble_at(&ref_branch[..],d-1);
-      depth_queue[d-1][nibble as usize] = hash;
+        let nibble: u8 = nibble_at(&ref_branch[..],d-1);
+        depth_queue.set_node(d-1, nibble as usize, CacheNode::Hash(hash));
       } else {
         println!("TODO root");
       }
@@ -330,7 +392,7 @@ fn flush_queue (ix: usize,
                 memdb: &MemoryDB::<KeccakHasher, DBValue>,
                 hashdb: &mut MemoryDB::<KeccakHasher, DBValue>,
                 nbelt: usize,
-                depth_queue : &mut Vec<Vec<H256>>, //(64 * 16 size) 
+                depth_queue : &mut CacheAccum, //(64 * 16 size) 
                 ) -> usize {
     for i in 0..ix+1 {
       let (ref k2,ref v2) = &val_queue[i]; 
@@ -346,7 +408,7 @@ fn flush_queue (ix: usize,
           let hash = hashdb.insert(&encoded[..]);
           // insert hash in branch (first level branch only at this point)
 // for debugging posistion          depth_queue[target_depth - 1][nibble_value as usize] = k3;
-          depth_queue[target_depth - 1][nibble_value as usize] = hash.clone();
+          depth_queue.set_node(target_depth - 1, nibble_value as usize, CacheNode::Hash(hash.clone()));
 
           if memdb.contains(&hash) {
             if nbelt < 20 {
@@ -394,7 +456,7 @@ pub enum ParseState {
   Depth(usize,usize),// no define depth and slice index of queue
 }
 // warn run on unmodified parity-common (branch is too hacky broken)
-fn experiment() {
+pub fn experiment() {
 	let tempdirlmdb  = std::path::Path::new("./all2");
     let mut env = rkv::Rkv::environment_builder();
   env.set_map_size(10485760 * 2);
@@ -437,14 +499,14 @@ let store: rkv::Store = env.open_or_create_default().unwrap();
   let nv: (Box<[u8]>,Box<[u8]>) = (Box::new([]),Box::new([]));
   // TODO here nibble size at 4bit. TODO probably possibility or more than 16 (aka depth * 16 but
   // less because it needs some filling TODO recheck algo
-  let mut val_queue : Vec<(Box<[u8]>,Box<[u8]>)> = vec![nv.clone();16];
+  let mut val_queue : Vec<(Box<[u8]>,Box<[u8]>)> = vec![nv.clone();NIBBLE_SIZE];
   // TODO here static max depth for 256 fixed size = 64. TODO maybe 63 ??
   // store branch in construction: one per level I think
   // TODO inefficient mem whise (64*16*32): could use empty matrix or box<rc>
   // TODO layout of Vec<Vec< sucks. -> go full static with [] for empty h256 would be ideal
   // (no H256 use and cal hash with custo fn (need hash function filling a mutable buffer(which
   // contradicts [] -> need to box I guess).
-  let mut depth_queue : Vec<Vec<H256>> = vec![vec![H256::new();16];64];
+  let mut depth_queue = CacheAccum::new();
   // compare iter ordering
   {
     let t = TrieDB::new(&memdb, &root);
