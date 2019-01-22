@@ -36,6 +36,7 @@ use kvdb::KeyValueDB;
 use ethereum_types::H256;
 use keccak_hasher::KeccakHasher;
 use rlp::DecoderError;
+use elastic_array::ElasticArray36;
 
 /// Convenience type alias to instantiate a Keccak-flavoured `RlpNodeCodec`
 pub type RlpCodec = RlpNodeCodec<KeccakHasher>;
@@ -175,6 +176,19 @@ fn nibble_at(v1: &[u8], ix: usize) -> u8 {
     v1[ix/2] & 15
   }
 }
+// TODO remove for nibbleslice api
+fn encoded_nibble(ori: &[u8], is_leaf: bool) -> ElasticArray36<u8> {
+	let l = ori.len();
+	let mut r = ElasticArray36::new();
+	let mut i = l % 2;
+	r.push(if i == 1 {0x10 + ori[0]} else {0} + if is_leaf {0x20} else {0});
+	while i < l {
+		r.push(ori[i] * 16 + ori[i+1]);
+		i += 2;
+	}
+	r
+}
+
 
 // (64 * 16) aka 2*byte size of key * nb nibble value, 2 being byte/nible (8/4)
 // TODO test others layout
@@ -213,6 +227,29 @@ impl CacheAccum {
   }
   fn reset_depth(&mut self, depth:usize) {
     self.0[depth] = (vec![CacheNode::None; NIBBLE_SIZE], 0, 0);
+  }
+
+  fn encode_branch(&self, depth:usize, mut cb_ext: impl FnMut(Vec<u8>) -> Option<H256>) -> Vec<u8>  {
+    RlpNodeCodec::branch_node(
+      self.0[depth].0.iter().map(|v| 
+        match v {
+          CacheNode::None => None,
+          CacheNode::Hash(ref h) => Some(trie::ChildReference::Hash(h.clone())), // TODO try rem clone
+          CacheNode::Ext(ref n, ref h) => {
+            let mut n = n.to_vec();
+            n.reverse();// TODO use proper encoded_nibble algo.
+            let enc_nibble = encoded_nibble(&n[..], false);
+            let encoded = RlpNodeCodec::ext_node(&enc_nibble[..], trie::ChildReference::Hash(h.clone()));
+            if let Some(h) = cb_ext(encoded.clone()) {
+              // TODO switch cb to ref??
+              Some(trie::ChildReference::Hash(h.clone()))
+            } else {
+              println!("{:?}, {:?}", &n[..], &h);
+              None
+            }
+          }, // TODO try rem clone,
+        }
+      ), None)
   }
 }
 
@@ -266,59 +303,35 @@ println!("ti{}", d);
     if depth_size == 1 {
       let unit = depth_queue.depth_last_added(d);
 
-/*    if empty {
-      // check extension cache
-      if unimplemented!() {
-
-      }
-    }*/
-      /*// TODO check extension cache to invalidate unit
-      if unimplemented!() {
-        // TODO fill extension cache!! + nibble
-        unit = 16;
-      } else {
-        // TODO extension it
-        
-      }*/
-      // one length extension testing TODO stack it in cache and stack its nibbles
-
       if d > 0 {
-//        let nibble: u8 = nibble_at(&ref_branch[..],d-1);
- //       let nibl = NibbleSlice::new_offset(&ref_branch[..], d);
- //           let partial = nibl.encoded_leftmost(d-dp, false);
-//            let v_hash: H256 = depth_queue.get_node(d,unit).clone().hash();
-            let v_hash:H256 = depth_queue.rem_node(d, unit).hash(); // TODO use mem replace avoid copy
-            let v_hashd = v_hash.clone();
-            // TODO extension
-            let encoded = RlpNodeCodec::ext_node(&[16 + unit as u8], trie::ChildReference::Hash(v_hash));
-            let hash = hashdb.insert(&encoded[..]);
-            let valid =  memdb.contains(&hash);
-            if valid {
-              // put to parent (TODO put to cache)
-              let nibble: u8 = nibble_at(&ref_branch[..],d-1);
-              depth_queue.set_node(d-1, nibble as usize, CacheNode::Ext(vec![nibble], hash));
-            } else {
-            /*  let v = memdb.get(&v_hashd).unwrap();
-
-      let dec : Node = RlpNodeCodec::decode(&v[..]).unwrap();
-      println!("{:?}", dec);
-              panic!("{}: {:?}, {}", unit, v_hashd, d);*/
-            }
-       
+        let node = depth_queue.rem_node(d, unit);
+        let nibble: u8 = nibble_at(&ref_branch[..],d-1);
+        if let CacheNode::Ext(mut n,v_hash) = node {
+          n.push(unit as u8);
+          depth_queue.set_node(d-1, nibble as usize, CacheNode::Ext(n, v_hash));
+        } else {
+          let v_hash = node.hash();
+          // TODO capacity vec of 64?
+          depth_queue.set_node(d-1, nibble as usize, CacheNode::Ext(vec![unit as u8], v_hash));
+        }
+      } else {
+        // TODO case test single element trie
       }
     }
     if depth_size > 1 {
     	//fn branch_node<I>(children: Iterator<H256>, value: Option<ElasticArray128<u8>>) -> Vec<u8>
       // TODO encode on buffer struct (do not stick to existing one)
-      let encoded = RlpNodeCodec::branch_node(
-        depth_queue.0[d].0.iter().map(|v| 
-          match v {
-            CacheNode::None => None,
-            CacheNode::Hash(ref h) => Some(trie::ChildReference::Hash(h.clone())), // TODO try rem clone
-            CacheNode::Ext(_, ref h) => Some(trie::ChildReference::Hash(h.clone())), // TODO try rem clone,
-          }
-        ), None);
-
+      let encoded = depth_queue.encode_branch(d, |enc_ext| {
+        let hash = hashdb.insert(&enc_ext[..]);
+        let valid =  memdb.contains(&hash);
+        if valid {
+          println!("a valid ext");
+          Some(hash)
+        } else {
+          println!("an invalid ext");
+          None
+        }
+      });
         
       depth_queue.reset_depth(d);
       /*let dec : Node = RlpNodeCodec::decode(&encoded[..]).unwrap();
@@ -332,7 +345,7 @@ println!("ti{}", d);
         let nibble: u8 = nibble_at(&ref_branch[..],d-1);
         depth_queue.set_node(d-1, nibble as usize, CacheNode::Hash(hash));
       } else {
-        println!("TODO root");
+        println!("TODO root: {:x?}", &hash);
       }
  /* 
       // update not empty parent -> wrong approach : cannnot manage ext like that
@@ -493,7 +506,8 @@ let store: rkv::Store = env.open_or_create_default().unwrap();
   };
 /*  {
     let mut t = TrieDB::new(&memdb, &root);
-    println!("{:#?}", t);
+    //println!("{:#?}", t);
+    println!("{:x?}", t.unwrap().root());
   }*/
   let mut state = ParseState::Start;
   let nv: (Box<[u8]>,Box<[u8]>) = (Box::new([]),Box::new([]));
