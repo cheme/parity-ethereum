@@ -71,6 +71,9 @@ ethcore-secretstore = { path = "secret-store", optional = true }
 
 registrar = { path = "util/registrar" }
 
+[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
+jemallocator = { version = "0.1" }
+
 [build-dependencies]
 rustc_version = "0.2"
 
@@ -136,4 +139,4 @@ members = [
 ]
 
 [patch.crates-io]
-heapsize = { git = "https://github.com/cheme/heapsize.git", branch = "ec-macfix" }
+heapsize = { git = "https://github.com/cheme/heapsize.git", branch = "ec-macfix2" }

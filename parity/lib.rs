@@ -18,6 +18,7 @@
 
 #![warn(missing_docs)]
 
+extern crate jemallocator;
 extern crate ansi_term;
 extern crate docopt;
 #[macro_use]
@@ -118,6 +119,11 @@ use cli::Args;
 use configuration::{Cmd, Execute};
 use deprecated::find_deprecated;
 use ethcore_logger::setup_log;
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[global_allocator]
+/// set jemalloc as global allocator (macos and linux)
+pub static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 #[cfg(feature = "memory_profiling")]
 use std::alloc::System;
 
