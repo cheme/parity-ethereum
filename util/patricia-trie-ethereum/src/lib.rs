@@ -454,6 +454,7 @@ pub fn trie_visit<H, C, I, A, B, F>(input: I, cb_ext: &mut F) where
     match state {
       ParseState::Start => {
         // nothing null root case
+        cb_ext(C::empty_node(), true);
       },
       ParseState::Depth(ix, depth) => {
         let ref_branches = val_queue[ix].0.clone(); // TODO this clone should be avoid by returning from flush_queue
@@ -525,7 +526,6 @@ fn trie_full_block () {
   }
 
   assert!(root == root_new);
-  assert!(memdb == hashdb);
   let empty = MemoryDB::<KeccakHasher, DBValue>::new();
   assert!(memdb != empty);
 }
@@ -534,12 +534,17 @@ fn trie_full_block () {
 fn trie_root_empty () {
   let mut memdb = MemoryDB::<KeccakHasher, DBValue>::new();
   let mut hashdb = MemoryDB::<KeccakHasher, DBValue>::new();
+  let mut root_new = H256::new();
   {
-    let cb = |enc_ext: Vec<u8>| {
-        let hash = hashdb.insert(&enc_ext[..]);
-        Some(hash) // TODO no need to fnmut anymore??
+    let mut cb = |enc_ext: Vec<u8>, is_root: bool| {
+      let hash = hashdb.insert(&enc_ext[..]);
+      if is_root {
+        root_new = hash.clone();
+      };
+      hash
     };
-//    trie_visit(Vec::new().into_iter(), &mut cb);
+    let data: Vec<(Vec<u8>,Vec<u8>)> = vec![];
+    trie_visit::<KeccakHasher, RlpCodec, _, _, _, _>(data.into_iter(), &mut cb);
   }
   let root = {
     let mut root = H256::new();
@@ -547,5 +552,6 @@ fn trie_root_empty () {
     let mut nbelt = 0;
     t.root().clone()
   };
+  assert_eq!(root, root_new);
 
 }
