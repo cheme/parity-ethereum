@@ -146,25 +146,35 @@ let a: &[u8] = &[0, 11, 71, 140, 124, 136, 184, 231, 226, 44];
 let b: &[u8] = &[0, 11, 224, 137, 13, 168, 7, 67, 202, 151];
 assert_eq!(5, biggest_depth(&a[..],&b[..]));
 }*/
-// warn start at 1...
+/*#[test]
+fn depth() {
+let a: &[u8] = &[1,2,3,3];
+let b: &[u8] = &[1,2,3,4];
+assert_eq!(8, biggest_depth(&a[..],&b[..]));
+}*/
+
+// warn start at 1... AKA first differ depth (aka the branch ix starting at 1) -> TODO change that!!!
 // TODO some variant with context could probably optimize that
 // (but for now keep the slow version)
 fn biggest_depth(v1: &[u8], v2: &[u8]) -> usize {
-  for a in 0..v1.len() {
+  //for a in 0.. v1.len(), v2.len()) { sorted assertion preventing out of bound TODO fuzz that
+  for a in 0.. v1.len() {
     if v1[a] == v2[a] {
     } else {
-      if v1[a] >> 4 ==  v2[a] >> 4 {
+      if (v1[a] >> 4) ==  (v2[a] >> 4) {
         return a * 2 + 2;
       } else {
+        println!("{} {}", v1[a], v2[a]);
+        println!("{} {}", v1[a] >> 4, v2[a] >> 4);
         return a * 2 + 1;
       }
     }
   }
-  return 1;
+  return v1.len() * 2 + 1;
 }
 
 // warn! start at 0 // TODO change biggest_depth??
-// warn! slow don't loop on that
+// warn! slow don't loop on that when possible
 fn nibble_at(v1: &[u8], ix: usize) -> u8 {
   if ix % 2 == 0 {
     v1[ix/2] >> 4
@@ -189,18 +199,22 @@ fn encoded_nibble(ori: &[u8], is_leaf: bool) -> ElasticArray36<u8> {
 // (64 * 16) aka 2*byte size of key * nb nibble value, 2 being byte/nible (8/4)
 // TODO test others layout
 // first usize to get nb of added value, second usize last added index
-struct CacheAccum<H: Hasher,C> (Vec<(Vec<CacheNode<<H as Hasher>::Out>>, usize, usize)>,PhantomData<(H,C)>);
+// second str is in branch value and can be remove for fix key scenario
+struct CacheAccum<H: Hasher,C,V> (Vec<(Vec<CacheNode<<H as Hasher>::Out>>, usize, usize)>,Vec<Option<V>>,PhantomData<(H,C)>);
 
 const DEPTH: usize = 64;
 const NIBBLE_SIZE: usize = 16;
-impl<H,C> CacheAccum<H,C>
+impl<H,C,V> CacheAccum<H,C,V>
 where
   H: Hasher,
   C: NodeCodec<H>,
+  V: AsRef<[u8]>,
 {
   // TODO switch to static and bench
   fn new() -> Self {
-    CacheAccum(vec![(vec![CacheNode::None; NIBBLE_SIZE],0,0); DEPTH], PhantomData)
+    CacheAccum(vec![(vec![CacheNode::None; NIBBLE_SIZE],0,0); DEPTH],
+    std::iter::repeat_with(|| None).take(DEPTH).collect() // vec![None; DEPTH] for non clone
+    , PhantomData)
   }
   fn get_node(&self, depth:usize, nibble_ix:usize) -> &CacheNode<H::Out> {
     &self.0[depth].0[nibble_ix]
@@ -229,7 +243,7 @@ where
     self.0[depth] = (vec![CacheNode::None; NIBBLE_SIZE], 0, 0);
   }
 
-  fn encode_branch_2(&self, depth:usize, cb_ext: &mut impl FnMut(Vec<u8>, bool) -> H::Out) -> Vec<u8>  {
+  fn encode_branch_2(&mut self, depth:usize, has_val: bool, cb_ext: &mut impl FnMut(Vec<u8>, bool) -> H::Out) -> Vec<u8>  {
     C::branch_node(
       self.0[depth].0.iter().map(|v| 
         match v {
@@ -238,13 +252,15 @@ where
           CacheNode::Ext(ref n, ref h) => {
             let mut n = n.to_vec();
             n.reverse();// TODO use proper encoded_nibble algo.
-            let enc_nibble = encoded_nibble(&n[..], false);
+            let enc_nibble = encoded_nibble(&n[..], false); // not leaf!!
             let encoded = C::ext_node(&enc_nibble[..], trie::ChildReference::Hash(h.clone())); // TODO try rem clone
             let h = cb_ext(encoded, false);
             Some(trie::ChildReference::Hash(h))
           },
         }
-      ), None)
+      ), if has_val {
+        std::mem::replace(&mut self.1[depth], None).map(|v|v.as_ref().into()) // TODO value could be a &[u8] instead of elastic!!
+      } else { None })
   }
 
  fn flush_queue_2<A,B> (
@@ -259,17 +275,24 @@ where
 	A: AsRef<[u8]> + Ord + Default + Clone,
 	B: AsRef<[u8]> + Default + Clone,
 {
+  let mut last_nb: u8 = NIBBLE_SIZE as u8 + 1;
     for i in 0..ix+1 {
+      
       let (ref k2,ref v2) = &val_queue[i]; 
+
           let mut found = false;
           // TODO For branch value the nibble at will probably fail: then just update parent branch
           // (easy?)
+          println!("{}:{:?}", target_depth,&k2.as_ref());
           let nibble_value = nibble_at(&k2.as_ref()[..], target_depth-1);
+          // is it a branch value (two candidate same ix)
+          assert!(last_nb != nibble_value, "detected earlier and put as a branch value");
+          last_nb = nibble_value;
           //let k3 = H256::from(&k2.as_ref()[..]);
           let nkey = NibbleSlice::new_offset(&k2.as_ref()[..],target_depth).encoded(true);
           // Note: fwiu, having fixed key size, all values are in leaf (no value in
           // branch). TODO run metrics on a node to count branch with values
-          let encoded = RlpNodeCodec::leaf_node(&nkey.as_ref()[..], &v2.as_ref()[..]);
+          let encoded = C::leaf_node(&nkey.as_ref()[..], &v2.as_ref()[..]);
           let hash = cb_ext(encoded, false);
           // insert hash in branch (first level branch only at this point)
 // for debugging posistion          depth_queue[target_depth - 1][nibble_value as usize] = k3;
@@ -277,7 +300,7 @@ where
 
             if nbelt < 20 {
               println!("found a leaf {}, depth {}",nbelt, target_depth);
-              println!("k {:x?}", &k2.as_ref()[..10]);
+              println!("k {:x?}", &k2.as_ref()[.. ::std::cmp::min(10, k2.as_ref().len())]);
               //println!("br {:?}", depth_queue[target_depth - 1]);
             }
 
@@ -310,8 +333,10 @@ println!("ti{}", d);
  
     // check if branch empty TODO switch to optional storage
     let mut empty = true;
+    let has_val = self.1[d].is_some();
     let depth_size = self.depth_added(d);
-    if depth_size == 1 {
+    assert!(depth_size != 0);
+    if !has_val && depth_size == 1 {
       let unit = self.depth_last_added(d);
 
       if d > 0 {
@@ -321,18 +346,30 @@ println!("ti{}", d);
           n.push(unit as u8);
           self.set_node(d-1, nibble as usize, CacheNode::Ext(n, v_hash));
         } else {
-          let v_hash = node.hash();
+          let v_hash = node.hash(); // TODO proper match!!
           // TODO capacity vec of 64?
           self.set_node(d-1, nibble as usize, CacheNode::Ext(vec![unit as u8], v_hash));
         }
       } else {
+        let node = self.rem_node(d, unit);
+          println!("TODO root: ext {:?}", &node);
         // TODO case test single element trie
+        if let CacheNode::Ext(mut n,v_hash) = node {
+//          println!("TODO root: ext {:?}", CacheNode::Ext(n, v_hash));
+          n.push(unit as u8);
+          n.reverse();// TODO use proper encoded_nibble algo.
+          println!("TODO root: ext {:?}", &n);
+          let enc_nibble = encoded_nibble(&n[..], false);
+          println!("TODO root: ext {:?}", &enc_nibble);
+          let encoded = C::ext_node(&enc_nibble[..], trie::ChildReference::Hash(v_hash)); // TODO try rem clone
+          cb_ext(encoded, true);
+        }
       }
-    }
-    if depth_size > 1 {
+    } else {
+      println!("enc_br");
     	//fn branch_node<I>(children: Iterator<H256>, value: Option<ElasticArray128<u8>>) -> Vec<u8>
       // TODO encode on buffer struct (do not stick to existing one)
-      let encoded = self.encode_branch_2(d, cb_ext);
+      let encoded = self.encode_branch_2(d, has_val, cb_ext);
         
       self.reset_depth(d);
       /*let dec : Node = RlpNodeCodec::decode(&encoded[..]).unwrap();
@@ -357,7 +394,7 @@ println!("ti{}", d);
 }
 
 // TODO try split struct
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 enum CacheNode<HO> {
   None,
   Hash(HO),
@@ -391,8 +428,8 @@ pub enum ParseState {
 
 pub fn trie_visit<H, C, I, A, B, F>(input: I, cb_ext: &mut F) where
 	I: IntoIterator<Item = (A, B)>,
-	A: AsRef<[u8]> + Ord + Default + Clone,
-	B: AsRef<[u8]> + Default + Clone,
+	A: AsRef<[u8]> + Ord + Default + Clone, // TODO rem Clone!!
+	B: AsRef<[u8]> + Default + Clone, // TODO rem Clone : init with None or const fn building value using a repeat_with (need option -> really need the all slice scenario to justify that (can keep default for testing and checking we can run without clone)).
 	H: Hasher,
   C: NodeCodec<H>,
   F: FnMut(Vec<u8>, bool) -> H::Out
@@ -410,7 +447,7 @@ pub fn trie_visit<H, C, I, A, B, F>(input: I, cb_ext: &mut F) where
   // TODO layout of Vec<Vec< sucks. -> go full static with [] for empty h256 would be ideal
   // (no H256 use and cal hash with custo fn (need hash function filling a mutable buffer(which
   // contradicts [] -> need to box I guess).
-  let mut depth_queue = CacheAccum::<H,C>::new();
+  let mut depth_queue = CacheAccum::<H,C,B>::new();
   // compare iter ordering
   {
     let mut nbelt = 0;
@@ -426,7 +463,11 @@ pub fn trie_visit<H, C, I, A, B, F>(input: I, cb_ext: &mut F) where
           },
           ParseState::Depth(ix, depth) => {
             let common_depth = biggest_depth(&val_queue[ix].0.as_ref()[..], &k.as_ref()[..]);
-            if common_depth == depth {
+            if common_depth == val_queue[ix].0.as_ref().len() * 2 + 1 {
+              depth_queue.1[common_depth - 1] = Some(val_queue[ix].1.clone()); // TODO proper swap
+              val_queue[ix] = (k,v);
+              state = ParseState::Depth(ix, common_depth); // needed for case where common depth grow
+            } else if common_depth == depth {
               val_queue[ix+1] = (k, v);
               state = ParseState::Depth(ix+1, common_depth);
             } else if common_depth > depth {
@@ -457,10 +498,20 @@ pub fn trie_visit<H, C, I, A, B, F>(input: I, cb_ext: &mut F) where
         cb_ext(C::empty_node(), true);
       },
       ParseState::Depth(ix, depth) => {
+      if depth == 0 {
+        // one element
+        let (ref k2,ref v2) = &val_queue[ix]; 
+        let nkey = NibbleSlice::new_offset(&k2.as_ref()[..],depth).encoded(true);
+        let encoded = C::leaf_node(&nkey.as_ref()[..], &v2.as_ref()[..]);
+        cb_ext(encoded, true);
+        nbflush += 1
+      } else {
         let ref_branches = val_queue[ix].0.clone(); // TODO this clone should be avoid by returning from flush_queue
+
         nbflush += depth_queue.flush_queue_2(cb_ext, ix, depth, &val_queue[..], nbelt);
         // TODO shouldn't it be 1 instead of 0??
         nbbranch += depth_queue.flush_branch_2(cb_ext, ref_branches, 0, depth, nbflush);
+      }
       }
     }
 
@@ -508,6 +559,10 @@ fn trie_full_block () {
 
   {
     let mut cb = |enc_ext: Vec<u8>, is_root: bool| {
+      if !is_root && enc_ext.len() < DEPTH/2 {
+        unimplemented!("direct data not implemented");
+      }
+ 
         let hash = hashdb.insert(&enc_ext[..]);
         if is_root {
           root_new = hash.clone();
@@ -537,6 +592,10 @@ fn trie_root_empty () {
   let mut root_new = H256::new();
   {
     let mut cb = |enc_ext: Vec<u8>, is_root: bool| {
+      if !is_root && enc_ext.len() < DEPTH/2 {
+        unimplemented!("direct data not implemented");
+      }
+ 
       let hash = hashdb.insert(&enc_ext[..]);
       if is_root {
         root_new = hash.clone();
@@ -555,3 +614,139 @@ fn trie_root_empty () {
   assert_eq!(root, root_new);
 
 }
+
+#[test]
+fn trie_one_node () {
+  let mut memdb = MemoryDB::<KeccakHasher, DBValue>::new();
+  let mut hashdb = MemoryDB::<KeccakHasher, DBValue>::new();
+  let mut root_new = H256::new();
+  {
+    let mut cb = |enc_ext: Vec<u8>, is_root: bool| {
+      if !is_root && enc_ext.len() < DEPTH/2 {
+        unimplemented!("direct data not implemented");
+      }
+ 
+      let hash = hashdb.insert(&enc_ext[..]);
+      if is_root {
+        root_new = hash.clone();
+      };
+      hash
+    };
+    let data: Vec<(Vec<u8>,Vec<u8>)> = vec![(vec![1u8,2u8,3u8,4u8],vec![7u8])];
+    trie_visit::<KeccakHasher, RlpCodec, _, _, _, _>(data.into_iter(), &mut cb);
+  }
+  let root = {
+    let mut root = H256::new();
+    let mut t = TrieDBMut::new(&mut memdb, &mut root);
+    t.insert(&[1u8,2u8,3u8,4u8],&[7u8]);
+    let mut nbelt = 0;
+    t.root().clone()
+  };
+  assert_eq!(root, root_new);
+}
+
+#[test]
+fn root_extension () {
+  let data: Vec<(Vec<u8>,Vec<u8>)> = vec![(vec![1u8,2u8,3u8,3u8],vec![8u8;32]),(vec![1u8,2u8,3u8,4u8],vec![7u8;32])];
+  let mut memdb = MemoryDB::<KeccakHasher, DBValue>::new();
+  let mut hashdb = MemoryDB::<KeccakHasher, DBValue>::new();
+  let mut root_new = H256::new();
+  {
+    let mut cb = |enc_ext: Vec<u8>, is_root: bool| {
+      if !is_root && enc_ext.len() < DEPTH/2 {
+        unimplemented!("direct data not implemented");
+      }
+      let hash = hashdb.insert(&enc_ext[..]);
+      if is_root {
+        root_new = hash.clone();
+      };
+      hash
+    };
+    trie_visit::<KeccakHasher, RlpCodec, _, _, _, _>(data.clone().into_iter(), &mut cb);
+  }
+  let root = {
+    let mut root = H256::new();
+    let mut t = TrieDBMut::new(&mut memdb, &mut root);
+    t.insert(&data[0].0[..],&data[0].1[..]);
+    t.insert(&data[1].0[..],&data[1].1[..]);
+    let mut nbelt = 0;
+    t.root().clone()
+  };
+  assert_eq!(root, root_new);
+}
+
+#[test]
+fn trie_middle_node () {
+  let data: Vec<(Vec<u8>,Vec<u8>)> = vec![(vec![1u8,2u8],vec![8u8;32]),(vec![1u8,2u8,3u8,4u8],vec![7u8;32])];
+  let mut memdb = MemoryDB::<KeccakHasher, DBValue>::new();
+  let mut hashdb = MemoryDB::<KeccakHasher, DBValue>::new();
+  let mut root_new = H256::new();
+  {
+    let mut cb = |enc_ext: Vec<u8>, is_root: bool| {
+      if !is_root && enc_ext.len() < DEPTH/2 {
+        unimplemented!("direct data not implemented");
+      }
+      let hash = hashdb.insert(&enc_ext[..]);
+      if is_root {
+        root_new = hash.clone();
+      };
+      hash
+    };
+    trie_visit::<KeccakHasher, RlpCodec, _, _, _, _>(data.clone().into_iter(), &mut cb);
+  }
+  let root = {
+    let mut root = H256::new();
+    let mut t = TrieDBMut::new(&mut memdb, &mut root);
+    t.insert(&data[0].0[..],&data[0].1[..]);
+    t.insert(&data[1].0[..],&data[1].1[..]);
+    let mut nbelt = 0;
+    t.root().clone()
+  };
+  {
+    let t = TrieDB::new(&memdb, &root).unwrap();
+    println!("{:?}", t);
+    for a in t.iter().unwrap() {
+      println!("a:{:?}", a);
+    }
+  }
+  {
+    let t = TrieDB::new(&hashdb, &root_new).unwrap();
+    println!("{:?}", t);
+    for a in t.iter().unwrap() {
+      println!("a:{:?}", a);
+    }
+  }
+
+  assert_eq!(root, root_new);
+}
+/*
+
+found a leaf 2, depth 1
+k [1, 2, 3, 4]
+found a leaf 2, depth 1
+k [1, 2]
+t1-0
+ti0
+TrieDB { hash_count: 0, root: Node::Extension { slice: 0'1'0'2, item: Node::Branch { nodes: [Node::Leaf { slice: 3'0'4, value: [7] }, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty,
+ Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty], value: Some([8]) } } }
+a:Ok(([1, 2], [8]))
+a:Ok(([1, 2, 3, 4], [7]))
+TrieDB { hash_count: 0, root: Node::Branch { nodes: [Node::Leaf { slice: 1'0'2, value: [8] }, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty,
+Node::Empty, Node::Empty, Node::Empty, Node::Empty], value: None } }
+a:Ok(([1, 2], [8]))
+
+found a leaf 2, depth 1
+k [1, 2]
+found a leaf 2, depth 1
+k [1, 2, 3, 4]
+t1-0
+ti0
+TrieDB { hash_count: 0, root: Node::Extension { slice: 0'1'0'2, item: Node::Branch { nodes: [Node::Leaf { slice: 3'0'4, value: [7] }, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty,
+ Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty], value: Some([8]) } } }
+a:Ok(([1, 2], [8]))
+a:Ok(([1, 2, 3, 4], [7]))
+TrieDB { hash_count: 0, root: Node::Branch { nodes: [Node::Leaf { slice: 1'0'2'0'3'0'4, value: [7] }, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty, Node:
+:Empty, Node::Empty, Node::Empty, Node::Empty, Node::Empty], value: None } }
+a:Ok(([1, 2, 3, 4], [7]))
+
+ */

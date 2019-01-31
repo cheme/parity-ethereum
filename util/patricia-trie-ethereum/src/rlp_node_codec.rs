@@ -101,6 +101,7 @@ impl NodeCodec<KeccakHasher> for RlpNodeCodec<KeccakHasher> {
 	// fn branch_node<I>(children: I, value: Option<Vec<u8>>) -> Vec<u8>
   // TODO couldn't we index branch data instead of iteratore (iterator could be other branch data,
   // maybe it is.
+  // TODO why elastic array here and &[u8] in leaf_node : makes no sense
   // TODO no copy rlp is more the thing asked here
 	fn branch_node<I>(children: I, value: Option<ElasticArray128<u8>>) -> Vec<u8>
 	where I: IntoIterator<Item=Option<ChildReference<<KeccakHasher as Hasher>::Out>>>
