@@ -211,7 +211,7 @@ where
   H: Hasher,
   C: NodeCodec<H>,
   V: AsRef<[u8]>,
-{
+  {
   // TODO switch to static and bench
   fn new() -> Self {
     CacheAccum(vec![(vec![CacheNode::None; NIBBLE_SIZE],0,0); DEPTH],
@@ -245,17 +245,17 @@ where
     self.0[depth] = (vec![CacheNode::None; NIBBLE_SIZE], 0, 0);
   }
 
-  fn encode_branch_2(&mut self, depth:usize, has_val: bool, cb_ext: &mut impl FnMut(Vec<u8>, bool) -> H::Out) -> Vec<u8>  {
+  fn encode_branch(&mut self, depth:usize, has_val: bool, cb_ext: &mut impl FnMut(Vec<u8>, bool) -> H::Out) -> Vec<u8>  {
     C::branch_node(
       self.0[depth].0.iter().map(|v| 
         match v {
           CacheNode::None => None,
-          CacheNode::Hash(ref h) => Some(trie::ChildReference::Hash(h.clone())), // TODO try rem clone
+          CacheNode::Hash(ref h) => Some(trie::ChildReference::Hash(*h)),
           CacheNode::Ext(ref n, ref h) => {
             let mut n = n.to_vec();
             n.reverse();// TODO use proper encoded_nibble algo.
             let enc_nibble = encoded_nibble(&n[..], false); // not leaf!!
-            let encoded = C::ext_node(&enc_nibble[..], trie::ChildReference::Hash(h.clone())); // TODO try rem clone
+            let encoded = C::ext_node(&enc_nibble[..], trie::ChildReference::Hash(*h));
             let h = cb_ext(encoded, false);
             Some(trie::ChildReference::Hash(h))
           },
@@ -265,128 +265,83 @@ where
       } else { None })
   }
 
-  // TODO this could be flushed on a item basis! (non need to stack a branch content (when going
-  // down we flush partial branch). -> val queue useless
- fn flush_val<A,B> (
-                &mut self, //(64 * 16 size) 
-  cb_ext: &mut impl FnMut(Vec<u8>, bool) -> H::Out,
-               target_depth: usize, 
-                val_queue: &(A,B), 
-                nbelt: usize,
-                )
-where
-	A: AsRef<[u8]> + Ord + Default + Clone,
-	B: AsRef<[u8]> + Default + Clone,
-{
-      
-      let &(ref k2,ref v2) = val_queue; 
-
-          let mut found = false;
-          // TODO For branch value the nibble at will probably fail: then just update parent branch
-          // (easy?)
-          println!("{}:{:?}", target_depth,&k2.as_ref());
-          let nibble_value = nibble_at(&k2.as_ref()[..], target_depth-1);
-          // is it a branch value (two candidate same ix)
-          //let k3 = H256::from(&k2.as_ref()[..]);
-          let nkey = NibbleSlice::new_offset(&k2.as_ref()[..],target_depth).encoded(true);
-          // Note: fwiu, having fixed key size, all values are in leaf (no value in
-          // branch). TODO run metrics on a node to count branch with values
-          let encoded = C::leaf_node(&nkey.as_ref()[..], &v2.as_ref()[..]);
-          let hash = cb_ext(encoded, false);
-          // insert hash in branch (first level branch only at this point)
-// for debugging posistion          depth_queue[target_depth - 1][nibble_value as usize] = k3;
-          self.set_node(target_depth - 1, nibble_value as usize, CacheNode::Hash(hash.clone()));
-
-            if nbelt < 20 {
-              println!("found a leaf {}, depth {}",nbelt, target_depth);
-              println!("k {:x?}", &k2.as_ref()[.. ::std::cmp::min(10, k2.as_ref().len())]);
-              //println!("br {:?}", depth_queue[target_depth - 1]);
-            }
-
+  fn flush_val (
+    &mut self, //(64 * 16 size) 
+    cb_ext: &mut impl FnMut(Vec<u8>, bool) -> H::Out,
+    target_depth: usize, 
+    &(ref k2, ref v2): &(impl AsRef<[u8]>,impl AsRef<[u8]>), 
+  ) {
+    let nibble_value = nibble_at(&k2.as_ref()[..], target_depth-1);
+    // is it a branch value (two candidate same ix)
+    let nkey = NibbleSlice::new_offset(&k2.as_ref()[..],target_depth).encoded(true);
+    // Note: fwiu, having fixed key size, all values are in leaf (no value in
+    // branch). TODO run metrics on a node to count branch with values
+    let encoded = C::leaf_node(&nkey.as_ref()[..], &v2.as_ref()[..]);
+    let hash = cb_ext(encoded, false);
+    // insert hash in branch (first level branch only at this point)
+    // for debugging posistion          depth_queue[target_depth - 1][nibble_value as usize] = k3;
+    self.set_node(target_depth - 1, nibble_value as usize, CacheNode::Hash(hash));
   }
 
+  fn flush_branch(
+    &mut self,
+    cb_ext: &mut impl FnMut(Vec<u8>, bool) -> H::Out,
+    ref_branch: impl AsRef<[u8]> + Ord,
+    new_depth: usize, 
+    old_depth: usize, 
+  ) {
+    for d in (new_depth..old_depth).rev() {
+   
+      // check if branch empty TODO switch to optional storage
+      let mut empty = true;
+      let has_val = self.1[d].is_some();
+      let depth_size = self.depth_added(d);
+      assert!(depth_size != 0);
+      if !has_val && depth_size == 1 {
+        // extension case
+        let unit = self.depth_last_added(d);
 
-
-fn flush_branch_2<A>(
-  &mut self,
-  cb_ext: &mut impl FnMut(Vec<u8>, bool) -> H::Out,
-  ref_branch: A,
-  new_depth: usize, 
-  old_depth: usize, 
-  nbelt: usize,
-) -> usize 
-where
-	A: AsRef<[u8]> + Ord + Default + Clone,
-{
-      if nbelt < 20 {
-println!("t{}-{}", old_depth, new_depth);
-      }
-  let mut ret = 0;
-  for d in (new_depth..old_depth).rev() {
-      if nbelt < 5 {
-println!("ti{}", d);
-      }
- 
-    // check if branch empty TODO switch to optional storage
-    let mut empty = true;
-    let has_val = self.1[d].is_some();
-    let depth_size = self.depth_added(d);
-    assert!(depth_size != 0);
-    if !has_val && depth_size == 1 {
-      let unit = self.depth_last_added(d);
-
-      if d > 0 {
         let node = self.rem_node(d, unit);
-        let nibble: u8 = nibble_at(&ref_branch.as_ref()[..],d-1);
+        // already extension
         if let CacheNode::Ext(mut n,v_hash) = node {
-          n.push(unit as u8);
-          self.set_node(d-1, nibble as usize, CacheNode::Ext(n, v_hash));
+          if d > 0 {
+            let nibble: u8 = nibble_at(&ref_branch.as_ref()[..],d-1);
+            n.push(unit as u8);
+            self.set_node(d-1, nibble as usize, CacheNode::Ext(n, v_hash));
+          } else {
+            n.push(unit as u8);
+            n.reverse(); // TODO use proper encoded_nibble algo.
+            let enc_nibble = encoded_nibble(&n[..], false);
+            let encoded = C::ext_node(&enc_nibble[..], trie::ChildReference::Hash(v_hash)); // TODO try rem clone
+            cb_ext(encoded, true);
+          }
         } else {
           let v_hash = node.hash(); // TODO proper match!!
-          // TODO capacity vec of 64?
-          self.set_node(d-1, nibble as usize, CacheNode::Ext(vec![unit as u8], v_hash));
+          if d > 0 {
+            let nibble: u8 = nibble_at(&ref_branch.as_ref()[..],d-1);
+            // TODO capacity vec of 64?
+            self.set_node(d-1, nibble as usize, CacheNode::Ext(vec![unit as u8], v_hash));
+          } else {
+            let enc_nibble = encoded_nibble(&[unit as u8], false);
+            let encoded = C::ext_node(&enc_nibble[..], trie::ChildReference::Hash(v_hash)); // TODO try rem clone
+            cb_ext(encoded, true);
+          }
         }
       } else {
-        let node = self.rem_node(d, unit);
-          println!("TODO root: ext {:?}", &node);
-        // TODO case test single element trie
-        if let CacheNode::Ext(mut n,v_hash) = node {
-//          println!("TODO root: ext {:?}", CacheNode::Ext(n, v_hash));
-          n.push(unit as u8);
-          n.reverse();// TODO use proper encoded_nibble algo.
-          println!("TODO root: ext {:?}", &n);
-          let enc_nibble = encoded_nibble(&n[..], false);
-          println!("TODO root: ext {:?}", &enc_nibble);
-          let encoded = C::ext_node(&enc_nibble[..], trie::ChildReference::Hash(v_hash)); // TODO try rem clone
-          cb_ext(encoded, true);
+        let encoded = self.encode_branch(d, has_val, cb_ext);
+        self.reset_depth(d);
+        let hash = cb_ext(encoded, d == 0);
+        // clear tmp val
+        // put hash in parent
+        if d > 0 {
+          let nibble: u8 = nibble_at(&ref_branch.as_ref()[..],d-1);
+          self.set_node(d-1, nibble as usize, CacheNode::Hash(hash));
+        } else {
+          // reachable !!
         }
       }
-    } else {
-      println!("enc_br");
-    	//fn branch_node<I>(children: Iterator<H256>, value: Option<ElasticArray128<u8>>) -> Vec<u8>
-      // TODO encode on buffer struct (do not stick to existing one)
-      let encoded = self.encode_branch_2(d, has_val, cb_ext);
-        
-      self.reset_depth(d);
-      /*let dec : Node = RlpNodeCodec::decode(&encoded[..]).unwrap();
-      println!("{:?}", dec);
-      panic!("d");*/
-      let hash = cb_ext(encoded, d == 0);
-      // clear tmp val
-      // put hash in parent
-      if d > 0 {
-        let nibble: u8 = nibble_at(&ref_branch.as_ref()[..],d-1);
-        self.set_node(d-1, nibble as usize, CacheNode::Hash(hash));
-      } else {
-        //println!("TODO root: {:x?}", &hash);
-      }
-      ret += 1;
     }
   }
-  ret
-}
-
-
 }
 
 // TODO try split struct
@@ -397,10 +352,7 @@ enum CacheNode<HO> {
   Ext(Vec<u8>,HO),// vec<u8> for nibble slice is not super good looking): TODO bench diff if explicitely boxed
 }
 
-impl<HO> CacheNode<HO>
-where
-  HO: Clone,
-{
+impl<HO> CacheNode<HO> {
   // unsafe accessors TODO bench diff with safe one
   fn hash(self) -> HO {
     if let CacheNode::Hash(h) = self {
@@ -416,115 +368,58 @@ where
   }
 }
 
-pub enum ParseState {
-  Start,
-  // depth of last item (not branch (branch + 1)
-  Depth(usize),// no define depth and slice index of queue
-}
-
-pub fn trie_visit<H, C, I, A, B, F>(input: I, cb_ext: &mut F) where
-	I: IntoIterator<Item = (A, B)>,
-	A: AsRef<[u8]> + Ord + Default + Clone, // TODO rem Clone!!
-	B: AsRef<[u8]> + Default + Clone, // TODO rem Clone : init with None or const fn building value using a repeat_with (need option -> really need the all slice scenario to justify that (can keep default for testing and checking we can run without clone)).
-	H: Hasher,
-  C: NodeCodec<H>,
-  F: FnMut(Vec<u8>, bool) -> H::Out
-{
-//  let mut hashdb = MemoryDB::<KeccakHasher, DBValue>::new(); // TODO rem or put it in closure (only use to hash stuff)
-  let mut state = ParseState::Start;
-  let nv: (A,B) = Default::default();
-  // TODO here nibble size at 4bit. TODO probably possibility or more than 16 (aka depth * 16 but
-  // less because it needs some filling TODO recheck algo
-  // TODO here static max depth for 256 fixed size = 64. TODO maybe 63 ??
-  // store branch in construction: one per level I think
-  // TODO inefficient mem whise (64*16*32): could use empty matrix or box<rc>
-  // TODO layout of Vec<Vec< sucks. -> go full static with [] for empty h256 would be ideal
-  // (no H256 use and cal hash with custo fn (need hash function filling a mutable buffer(which
-  // contradicts [] -> need to box I guess).
+pub fn trie_visit<H, C, I, A, B, F>(input: I, cb_ext: &mut F) 
+  where
+    I: IntoIterator<Item = (A, B)>,
+    A: AsRef<[u8]> + Ord,
+    B: AsRef<[u8]>,
+    H: Hasher,
+    C: NodeCodec<H>,
+    F: FnMut(Vec<u8>, bool) -> H::Out
+  {
   let mut depth_queue = CacheAccum::<H,C,B>::new();
   // compare iter ordering
-  {
-    let mut nbelt = 0;
-    let mut nbflush = 0;
-    let mut nbbranch = 0;
-    let mut iter_input = input.into_iter();
-    if let Some(mut prev_val) = iter_input.next() {
-      // start depth at 0 is not initialized value TODO change with Option<usize> to get
-      // right ix ??
-      state = ParseState::Depth(0);
-         
-      for (k, v) in iter_input {
-      nbelt += 1;
+  let mut iter_input = input.into_iter();
+  if let Some(mut prev_val) = iter_input.next() {
+    // depth of last item TODO rename to last_depth
+    let mut prev_depth = 0;
 
-        match state {
-          ParseState::Start => {
-            prev_val = (k, v);
-            // start depth at 0 is not initialized value TODO change with Option<usize> to get
-            // right ix ??
-            state = ParseState::Depth(0);
-          },
-          ParseState::Depth(depth) => {
-            // TODO should we enqueue first (makes comparison more elegant).
-            let common_depth = biggest_depth(&prev_val.0.as_ref()[..], &k.as_ref()[..]);
-            // 0 is a reserved value : could use option
-            let depth_item = common_depth + 1;
-            if common_depth == 9 {
-              println!("{:?}-{:?}", &prev_val.0.as_ref()[..], &k.as_ref()[..]);
-            }
-            if common_depth == prev_val.0.as_ref().len() * 2 {
-              // the new key include the previous one : branch value case
-                depth_queue.1[common_depth] = Some(prev_val.1.clone()); // TODO proper swap
-              prev_val = (k,v);
-              state = ParseState::Depth(depth_item); // TODO pb here ix of new apply to old
-            } else if depth_item >= depth {
-              // put prev with next
-              depth_queue.flush_val(cb_ext, depth_item, &prev_val, nbelt);
-              nbflush += 1;
-              prev_val = (k, v);
-              state = ParseState::Depth(depth_item);
-            } else if depth_item < depth {
-              let ref_branches = prev_val.0.clone(); // TODO this clone should be avoid by returning from flush_queue
-              // do not put with next
-              depth_queue.flush_val(cb_ext, depth, &prev_val, nbelt);
-              nbflush += 1;
-              nbbranch += depth_queue.flush_branch_2(cb_ext, ref_branches, depth_item, depth, nbflush);
-              prev_val = (k, v);
-              state = ParseState::Depth(depth_item);
-            }
-          }
-        }
-
-    }
-    // pending
-    match state {
-      ParseState::Start => {
-        // nothing null root case
-        cb_ext(C::empty_node(), true);
-      },
-      ParseState::Depth(depth) => {
-      if depth == 0 {
-        // one element
-        let (ref k2,ref v2) = &prev_val; 
-        let nkey = NibbleSlice::new_offset(&k2.as_ref()[..],depth).encoded(true);
-        let encoded = C::leaf_node(&nkey.as_ref()[..], &v2.as_ref()[..]);
-        cb_ext(encoded, true);
-        nbflush += 1
-      } else {
-        let ref_branches = prev_val.0.clone(); // TODO this clone should be avoid by returning from flush_queue
-        println!("last {},{:?}",0, prev_val.0.as_ref()); // TODO this clone should be avoid by returning from flush_queue
-
-        depth_queue.flush_val(cb_ext, depth, &prev_val, nbelt);
-        nbflush += 1;
-        // TODO shouldn't it be 1 instead of 0??
-        nbbranch += depth_queue.flush_branch_2(cb_ext, ref_branches, 0, depth, nbflush);
+    for (k, v) in iter_input {
+      let common_depth = biggest_depth(&prev_val.0.as_ref()[..], &k.as_ref()[..]);
+      // 0 is a reserved value : could use option
+      let depth_item = common_depth + 1;
+      if common_depth == prev_val.0.as_ref().len() * 2 {
+        // the new key include the previous one : branch value case
+        depth_queue.1[common_depth] = Some(prev_val.1);
+      } else if depth_item >= prev_depth {
+        // put prev with next
+        depth_queue.flush_val(cb_ext, depth_item, &prev_val);
+      } else if depth_item < prev_depth {
+        // do not put with next
+        depth_queue.flush_val(cb_ext, prev_depth, &prev_val);
+        let ref_branches = prev_val.0;
+        depth_queue.flush_branch(cb_ext, ref_branches, depth_item, prev_depth);
       }
-      }
+
+      prev_val = (k, v);
+      prev_depth = depth_item;
     }
+    // last pendings
+    if prev_depth == 0 {
+      // one element
+      let (ref k2,ref v2) = &prev_val; 
+      let nkey = NibbleSlice::new_offset(&k2.as_ref()[..],prev_depth).encoded(true);
+      let encoded = C::leaf_node(&nkey.as_ref()[..], &v2.as_ref()[..]);
+      cb_ext(encoded, true);
     } else {
-        // nothing null root case
-        cb_ext(C::empty_node(), true);
-    }
+      depth_queue.flush_val(cb_ext, prev_depth, &prev_val);
+      let ref_branches = prev_val.0;
 
+      depth_queue.flush_branch(cb_ext, ref_branches, 0, prev_depth);
+    }
+  } else {
+    // nothing null root case
+    cb_ext(C::empty_node(), true);
   }
 }
 
@@ -675,7 +570,7 @@ fn trie_middle_node2 () {
     (vec![1u8,2u8],vec![8u8;32]),
     (vec![1u8,2u8,3u8,4u8],vec![7u8;32]),
     (vec![1u8,2u8,3u8,5u8],vec![7u8;32]),
-    //(vec![1u8,2u8,3u8,5u8,3u8],vec![7u8;32]), -> already issue previous!!
+    (vec![1u8,2u8,3u8,5u8,3u8],vec![7u8;32]),
   ]);
 }
 
