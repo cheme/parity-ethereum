@@ -267,22 +267,19 @@ where
 
   // TODO this could be flushed on a item basis! (non need to stack a branch content (when going
   // down we flush partial branch). -> val queue useless
- fn flush_queue_2<A,B> (
+ fn flush_val<A,B> (
                 &mut self, //(64 * 16 size) 
   cb_ext: &mut impl FnMut(Vec<u8>, bool) -> H::Out,
-   ix: usize, 
                target_depth: usize, 
-                val_queue: &[(A,B)], 
+                val_queue: &(A,B), 
                 nbelt: usize,
-                ) -> usize 
+                )
 where
 	A: AsRef<[u8]> + Ord + Default + Clone,
 	B: AsRef<[u8]> + Default + Clone,
 {
-  let mut last_nb: u8 = NIBBLE_SIZE as u8 + 1;
-    for i in 0..ix+1 {
       
-      let (ref k2,ref v2) = &val_queue[i]; 
+      let &(ref k2,ref v2) = val_queue; 
 
           let mut found = false;
           // TODO For branch value the nibble at will probably fail: then just update parent branch
@@ -290,8 +287,6 @@ where
           println!("{}:{:?}", target_depth,&k2.as_ref());
           let nibble_value = nibble_at(&k2.as_ref()[..], target_depth-1);
           // is it a branch value (two candidate same ix)
-          assert!(last_nb != nibble_value, "detected earlier and put as a branch value");
-          last_nb = nibble_value;
           //let k3 = H256::from(&k2.as_ref()[..]);
           let nkey = NibbleSlice::new_offset(&k2.as_ref()[..],target_depth).encoded(true);
           // Note: fwiu, having fixed key size, all values are in leaf (no value in
@@ -308,9 +303,6 @@ where
               //println!("br {:?}", depth_queue[target_depth - 1]);
             }
 
-    }
- 
-    return ix+1;
   }
 
 
@@ -426,8 +418,8 @@ where
 
 pub enum ParseState {
   Start,
-  // ix then depth of last item (not branch (branch + 1)
-  Depth(usize,usize),// no define depth and slice index of queue
+  // depth of last item (not branch (branch + 1)
+  Depth(usize),// no define depth and slice index of queue
 }
 
 pub fn trie_visit<H, C, I, A, B, F>(input: I, cb_ext: &mut F) where
@@ -443,8 +435,6 @@ pub fn trie_visit<H, C, I, A, B, F>(input: I, cb_ext: &mut F) where
   let nv: (A,B) = Default::default();
   // TODO here nibble size at 4bit. TODO probably possibility or more than 16 (aka depth * 16 but
   // less because it needs some filling TODO recheck algo
-  //let mut val_queue : Vec<(Box<[u8]>,Box<[u8]>)> = vec![nv.clone();NIBBLE_SIZE];
-  let mut val_queue : Vec<(A,B)> = vec![nv.clone();NIBBLE_SIZE];
   // TODO here static max depth for 256 fixed size = 64. TODO maybe 63 ??
   // store branch in construction: one per level I think
   // TODO inefficient mem whise (64*16*32): could use empty matrix or box<rc>
@@ -457,61 +447,49 @@ pub fn trie_visit<H, C, I, A, B, F>(input: I, cb_ext: &mut F) where
     let mut nbelt = 0;
     let mut nbflush = 0;
     let mut nbbranch = 0;
-      for (k, v) in input.into_iter() {
+    let mut iter_input = input.into_iter();
+    if let Some(mut prev_val) = iter_input.next() {
+      // start depth at 0 is not initialized value TODO change with Option<usize> to get
+      // right ix ??
+      state = ParseState::Depth(0);
+         
+      for (k, v) in iter_input {
       nbelt += 1;
 
         match state {
           ParseState::Start => {
-            val_queue[0] = (k, v);
+            prev_val = (k, v);
             // start depth at 0 is not initialized value TODO change with Option<usize> to get
             // right ix ??
-            state = ParseState::Depth(0,0);
+            state = ParseState::Depth(0);
           },
-          ParseState::Depth(ix, depth) => {
+          ParseState::Depth(depth) => {
             // TODO should we enqueue first (makes comparison more elegant).
-            let common_depth = biggest_depth(&val_queue[ix].0.as_ref()[..], &k.as_ref()[..]);
+            let common_depth = biggest_depth(&prev_val.0.as_ref()[..], &k.as_ref()[..]);
             // 0 is a reserved value : could use option
             let depth_item = common_depth + 1;
             if common_depth == 9 {
-              println!("{:?}-{:?}", &val_queue[ix].0.as_ref()[..], &k.as_ref()[..]);
+              println!("{:?}-{:?}", &prev_val.0.as_ref()[..], &k.as_ref()[..]);
             }
-            if common_depth == val_queue[ix].0.as_ref().len() * 2 {
+            if common_depth == prev_val.0.as_ref().len() * 2 {
               // the new key include the previous one : branch value case
-              if ix == 0 {
-                depth_queue.1[common_depth] = Some(val_queue[ix].1.clone()); // TODO proper swap
-              } else {
-                // common depth is not less than previous : no need to compare
-                assert!(common_depth >= biggest_depth(&val_queue[ix-1].0.as_ref()[..], &val_queue[ix-1].0.as_ref()[..]));// TODO remove (just asserting it)
-              }
-              val_queue[ix] = (k,v);
-              state = ParseState::Depth(ix, depth_item); // needed for case where common depth grow
-              /*println!("replace at {:?} F: {:?}", ix, &val_queue[ix].0.as_ref()[..]);
-              if ix > 0 {
-                nbflush += depth_queue.flush_queue_2(cb_ext, ix - 1, depth, &val_queue[..], nbelt);
-              }
-              val_queue[0] = (k,v);
-              state = ParseState::Depth(0, depth_item); // needed for case where common depth grow*/
-              state = ParseState::Depth(ix, depth_item); // TODO pb here ix of new apply to old
-            } /*else if depth_item == depth {
-              val_queue[ix+1] = (k, v);
-              state = ParseState::Depth(ix+1, depth_item);
-            }*/ else if depth_item >= depth {
-              if ix == 0 {
-                // nothing just stack (single item). TODO move to previous case (needs reordering
-                // of conditions)
-              } else {
-                nbflush += depth_queue.flush_queue_2(cb_ext, ix - 1, depth, &val_queue[..], nbelt);
-                // TODO rusty clone : unsafe that??
-                val_queue[0] = std::mem::replace(&mut val_queue[ix],nv.clone());
-              }
-              val_queue[1] = (k, v);
-              state = ParseState::Depth(1, depth_item);
+                depth_queue.1[common_depth] = Some(prev_val.1.clone()); // TODO proper swap
+              prev_val = (k,v);
+              state = ParseState::Depth(depth_item); // TODO pb here ix of new apply to old
+            } else if depth_item >= depth {
+              // put prev with next
+              depth_queue.flush_val(cb_ext, depth_item, &prev_val, nbelt);
+              nbflush += 1;
+              prev_val = (k, v);
+              state = ParseState::Depth(depth_item);
             } else if depth_item < depth {
-              let ref_branches = val_queue[ix].0.clone(); // TODO this clone should be avoid by returning from flush_queue
-              nbflush += depth_queue.flush_queue_2(cb_ext, ix, depth, &val_queue[..], nbelt);
+              let ref_branches = prev_val.0.clone(); // TODO this clone should be avoid by returning from flush_queue
+              // do not put with next
+              depth_queue.flush_val(cb_ext, depth, &prev_val, nbelt);
+              nbflush += 1;
               nbbranch += depth_queue.flush_branch_2(cb_ext, ref_branches, depth_item, depth, nbflush);
-              val_queue[0] = (k, v);
-              state = ParseState::Depth(0, depth_item);
+              prev_val = (k, v);
+              state = ParseState::Depth(depth_item);
             }
           }
         }
@@ -523,23 +501,28 @@ pub fn trie_visit<H, C, I, A, B, F>(input: I, cb_ext: &mut F) where
         // nothing null root case
         cb_ext(C::empty_node(), true);
       },
-      ParseState::Depth(ix, depth) => {
+      ParseState::Depth(depth) => {
       if depth == 0 {
         // one element
-        let (ref k2,ref v2) = &val_queue[ix]; 
+        let (ref k2,ref v2) = &prev_val; 
         let nkey = NibbleSlice::new_offset(&k2.as_ref()[..],depth).encoded(true);
         let encoded = C::leaf_node(&nkey.as_ref()[..], &v2.as_ref()[..]);
         cb_ext(encoded, true);
         nbflush += 1
       } else {
-        let ref_branches = val_queue[ix].0.clone(); // TODO this clone should be avoid by returning from flush_queue
-        println!("last {},{:?}",ix, val_queue[ix].0.as_ref()); // TODO this clone should be avoid by returning from flush_queue
+        let ref_branches = prev_val.0.clone(); // TODO this clone should be avoid by returning from flush_queue
+        println!("last {},{:?}",0, prev_val.0.as_ref()); // TODO this clone should be avoid by returning from flush_queue
 
-        nbflush += depth_queue.flush_queue_2(cb_ext, ix, depth, &val_queue[..], nbelt);
+        depth_queue.flush_val(cb_ext, depth, &prev_val, nbelt);
+        nbflush += 1;
         // TODO shouldn't it be 1 instead of 0??
         nbbranch += depth_queue.flush_branch_2(cb_ext, ref_branches, 0, depth, nbflush);
       }
       }
+    }
+    } else {
+        // nothing null root case
+        cb_ext(C::empty_node(), true);
     }
 
   }
