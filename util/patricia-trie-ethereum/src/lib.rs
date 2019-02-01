@@ -156,21 +156,23 @@ assert_eq!(8, biggest_depth(&a[..],&b[..]));
 // warn start at 1... AKA first differ depth (aka the branch ix starting at 1) -> TODO change that!!!
 // TODO some variant with context could probably optimize that
 // (but for now keep the slow version)
+// Index of potential branch is the
+// biggest common depth (indexing starting at 0).
 fn biggest_depth(v1: &[u8], v2: &[u8]) -> usize {
   //for a in 0.. v1.len(), v2.len()) { sorted assertion preventing out of bound TODO fuzz that
   for a in 0.. v1.len() {
     if v1[a] == v2[a] {
     } else {
       if (v1[a] >> 4) ==  (v2[a] >> 4) {
-        return a * 2 + 2;
+        return a * 2 + 1;
       } else {
         println!("{} {}", v1[a], v2[a]);
         println!("{} {}", v1[a] >> 4, v2[a] >> 4);
-        return a * 2 + 1;
+        return a * 2;
       }
     }
   }
-  return v1.len() * 2 + 1;
+  return v1.len() * 2;
 }
 
 // warn! start at 0 // TODO change biggest_depth??
@@ -263,6 +265,8 @@ where
       } else { None })
   }
 
+  // TODO this could be flushed on a item basis! (non need to stack a branch content (when going
+  // down we flush partial branch). -> val queue useless
  fn flush_queue_2<A,B> (
                 &mut self, //(64 * 16 size) 
   cb_ext: &mut impl FnMut(Vec<u8>, bool) -> H::Out,
@@ -422,7 +426,7 @@ where
 
 pub enum ParseState {
   Start,
-  // ix then depth
+  // ix then depth of last item (not branch (branch + 1)
   Depth(usize,usize),// no define depth and slice index of queue
 }
 
@@ -459,33 +463,55 @@ pub fn trie_visit<H, C, I, A, B, F>(input: I, cb_ext: &mut F) where
         match state {
           ParseState::Start => {
             val_queue[0] = (k, v);
+            // start depth at 0 is not initialized value TODO change with Option<usize> to get
+            // right ix ??
             state = ParseState::Depth(0,0);
           },
           ParseState::Depth(ix, depth) => {
+            // TODO should we enqueue first (makes comparison more elegant).
             let common_depth = biggest_depth(&val_queue[ix].0.as_ref()[..], &k.as_ref()[..]);
-            if common_depth == val_queue[ix].0.as_ref().len() * 2 + 1 {
-              depth_queue.1[common_depth - 1] = Some(val_queue[ix].1.clone()); // TODO proper swap
-              val_queue[ix] = (k,v);
-              state = ParseState::Depth(ix, common_depth); // needed for case where common depth grow
-            } else if common_depth == depth {
-              val_queue[ix+1] = (k, v);
-              state = ParseState::Depth(ix+1, common_depth);
-            } else if common_depth > depth {
+            // 0 is a reserved value : could use option
+            let depth_item = common_depth + 1;
+            if common_depth == 9 {
+              println!("{:?}-{:?}", &val_queue[ix].0.as_ref()[..], &k.as_ref()[..]);
+            }
+            if common_depth == val_queue[ix].0.as_ref().len() * 2 {
+              // the new key include the previous one : branch value case
               if ix == 0 {
-                // nothing
+                depth_queue.1[common_depth] = Some(val_queue[ix].1.clone()); // TODO proper swap
+              } else {
+                // common depth is not less than previous : no need to compare
+                assert!(common_depth >= biggest_depth(&val_queue[ix-1].0.as_ref()[..], &val_queue[ix-1].0.as_ref()[..]));// TODO remove (just asserting it)
+              }
+              val_queue[ix] = (k,v);
+              state = ParseState::Depth(ix, depth_item); // needed for case where common depth grow
+              /*println!("replace at {:?} F: {:?}", ix, &val_queue[ix].0.as_ref()[..]);
+              if ix > 0 {
+                nbflush += depth_queue.flush_queue_2(cb_ext, ix - 1, depth, &val_queue[..], nbelt);
+              }
+              val_queue[0] = (k,v);
+              state = ParseState::Depth(0, depth_item); // needed for case where common depth grow*/
+              state = ParseState::Depth(ix, depth_item); // TODO pb here ix of new apply to old
+            } /*else if depth_item == depth {
+              val_queue[ix+1] = (k, v);
+              state = ParseState::Depth(ix+1, depth_item);
+            }*/ else if depth_item >= depth {
+              if ix == 0 {
+                // nothing just stack (single item). TODO move to previous case (needs reordering
+                // of conditions)
               } else {
                 nbflush += depth_queue.flush_queue_2(cb_ext, ix - 1, depth, &val_queue[..], nbelt);
                 // TODO rusty clone : unsafe that??
                 val_queue[0] = std::mem::replace(&mut val_queue[ix],nv.clone());
               }
               val_queue[1] = (k, v);
-              state = ParseState::Depth(1, common_depth);
-            } else if common_depth < depth {
+              state = ParseState::Depth(1, depth_item);
+            } else if depth_item < depth {
               let ref_branches = val_queue[ix].0.clone(); // TODO this clone should be avoid by returning from flush_queue
               nbflush += depth_queue.flush_queue_2(cb_ext, ix, depth, &val_queue[..], nbelt);
-              nbbranch += depth_queue.flush_branch_2(cb_ext, ref_branches, common_depth, depth, nbflush);
+              nbbranch += depth_queue.flush_branch_2(cb_ext, ref_branches, depth_item, depth, nbflush);
               val_queue[0] = (k, v);
-              state = ParseState::Depth(0, common_depth);
+              state = ParseState::Depth(0, depth_item);
             }
           }
         }
@@ -507,6 +533,7 @@ pub fn trie_visit<H, C, I, A, B, F>(input: I, cb_ext: &mut F) where
         nbflush += 1
       } else {
         let ref_branches = val_queue[ix].0.clone(); // TODO this clone should be avoid by returning from flush_queue
+        println!("last {},{:?}",ix, val_queue[ix].0.as_ref()); // TODO this clone should be avoid by returning from flush_queue
 
         nbflush += depth_queue.flush_queue_2(cb_ext, ix, depth, &val_queue[..], nbelt);
         // TODO shouldn't it be 1 instead of 0??
@@ -587,97 +614,26 @@ fn trie_full_block () {
 
 #[test]
 fn trie_root_empty () {
-  let mut memdb = MemoryDB::<KeccakHasher, DBValue>::new();
-  let mut hashdb = MemoryDB::<KeccakHasher, DBValue>::new();
-  let mut root_new = H256::new();
-  {
-    let mut cb = |enc_ext: Vec<u8>, is_root: bool| {
-      if !is_root && enc_ext.len() < DEPTH/2 {
-        unimplemented!("direct data not implemented");
-      }
- 
-      let hash = hashdb.insert(&enc_ext[..]);
-      if is_root {
-        root_new = hash.clone();
-      };
-      hash
-    };
-    let data: Vec<(Vec<u8>,Vec<u8>)> = vec![];
-    trie_visit::<KeccakHasher, RlpCodec, _, _, _, _>(data.into_iter(), &mut cb);
-  }
-  let root = {
-    let mut root = H256::new();
-    let mut t = TrieDBMut::new(&mut memdb, &mut root);
-    let mut nbelt = 0;
-    t.root().clone()
-  };
-  assert_eq!(root, root_new);
-
+  compare_impl(vec![])
 }
 
 #[test]
 fn trie_one_node () {
-  let mut memdb = MemoryDB::<KeccakHasher, DBValue>::new();
-  let mut hashdb = MemoryDB::<KeccakHasher, DBValue>::new();
-  let mut root_new = H256::new();
-  {
-    let mut cb = |enc_ext: Vec<u8>, is_root: bool| {
-      if !is_root && enc_ext.len() < DEPTH/2 {
-        unimplemented!("direct data not implemented");
-      }
- 
-      let hash = hashdb.insert(&enc_ext[..]);
-      if is_root {
-        root_new = hash.clone();
-      };
-      hash
-    };
-    let data: Vec<(Vec<u8>,Vec<u8>)> = vec![(vec![1u8,2u8,3u8,4u8],vec![7u8])];
-    trie_visit::<KeccakHasher, RlpCodec, _, _, _, _>(data.into_iter(), &mut cb);
-  }
-  let root = {
-    let mut root = H256::new();
-    let mut t = TrieDBMut::new(&mut memdb, &mut root);
-    t.insert(&[1u8,2u8,3u8,4u8],&[7u8]);
-    let mut nbelt = 0;
-    t.root().clone()
-  };
-  assert_eq!(root, root_new);
+  compare_impl(vec![
+    (vec![1u8,2u8,3u8,4u8],vec![7u8]),
+  ]);
 }
 
 #[test]
 fn root_extension () {
-  let data: Vec<(Vec<u8>,Vec<u8>)> = vec![(vec![1u8,2u8,3u8,3u8],vec![8u8;32]),(vec![1u8,2u8,3u8,4u8],vec![7u8;32])];
-  let mut memdb = MemoryDB::<KeccakHasher, DBValue>::new();
-  let mut hashdb = MemoryDB::<KeccakHasher, DBValue>::new();
-  let mut root_new = H256::new();
-  {
-    let mut cb = |enc_ext: Vec<u8>, is_root: bool| {
-      if !is_root && enc_ext.len() < DEPTH/2 {
-        unimplemented!("direct data not implemented");
-      }
-      let hash = hashdb.insert(&enc_ext[..]);
-      if is_root {
-        root_new = hash.clone();
-      };
-      hash
-    };
-    trie_visit::<KeccakHasher, RlpCodec, _, _, _, _>(data.clone().into_iter(), &mut cb);
-  }
-  let root = {
-    let mut root = H256::new();
-    let mut t = TrieDBMut::new(&mut memdb, &mut root);
-    t.insert(&data[0].0[..],&data[0].1[..]);
-    t.insert(&data[1].0[..],&data[1].1[..]);
-    let mut nbelt = 0;
-    t.root().clone()
-  };
-  assert_eq!(root, root_new);
+  compare_impl(vec![
+    (vec![1u8,2u8,3u8,3u8],vec![8u8;32]),
+    (vec![1u8,2u8,3u8,4u8],vec![7u8;32]),
+  ]);
 }
 
-#[test]
-fn trie_middle_node () {
-  let data: Vec<(Vec<u8>,Vec<u8>)> = vec![(vec![1u8,2u8],vec![8u8;32]),(vec![1u8,2u8,3u8,4u8],vec![7u8;32])];
+#[cfg(test)]
+fn compare_impl(data: Vec<(Vec<u8>,Vec<u8>)>) {
   let mut memdb = MemoryDB::<KeccakHasher, DBValue>::new();
   let mut hashdb = MemoryDB::<KeccakHasher, DBValue>::new();
   let mut root_new = H256::new();
@@ -697,8 +653,9 @@ fn trie_middle_node () {
   let root = {
     let mut root = H256::new();
     let mut t = TrieDBMut::new(&mut memdb, &mut root);
-    t.insert(&data[0].0[..],&data[0].1[..]);
-    t.insert(&data[1].0[..],&data[1].1[..]);
+    for i in 0..data.len() {
+      t.insert(&data[i].0[..],&data[i].1[..]);
+    }
     let mut nbelt = 0;
     t.root().clone()
   };
@@ -719,6 +676,26 @@ fn trie_middle_node () {
 
   assert_eq!(root, root_new);
 }
+
+#[test]
+fn trie_middle_node () {
+  compare_impl(vec![
+    (vec![1u8,2u8],vec![8u8;32]),
+    (vec![1u8,2u8,3u8,4u8],vec![7u8;32]),
+  ]);
+}
+
+#[test]
+fn trie_middle_node2 () {
+  compare_impl(vec![
+    (vec![0u8,2u8,3u8,5u8,3u8],vec![1u8;32]),
+    (vec![1u8,2u8],vec![8u8;32]),
+    (vec![1u8,2u8,3u8,4u8],vec![7u8;32]),
+    (vec![1u8,2u8,3u8,5u8],vec![7u8;32]),
+    //(vec![1u8,2u8,3u8,5u8,3u8],vec![7u8;32]), -> already issue previous!!
+  ]);
+}
+
 /*
 
 found a leaf 2, depth 1
