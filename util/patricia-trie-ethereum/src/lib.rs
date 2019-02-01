@@ -29,7 +29,7 @@ extern crate kvdb_rocksdb as rocksdb;
 extern crate memorydb;
 mod rlp_node_codec;
 use memorydb::MemoryDB;
-use trie::{TrieMut, Trie, DBValue, node::Node, NibbleSlice, NodeCodec};
+use trie::{TrieMut, Trie, DBValue, node::Node, NibbleSlice, NodeCodec, ChildReference};
 use hashdb::{HashDB, Hasher};
 pub use rlp_node_codec::RlpNodeCodec;
 use kvdb::KeyValueDB;
@@ -184,6 +184,7 @@ fn nibble_at(v1: &[u8], ix: usize) -> u8 {
     v1[ix/2] & 15
   }
 }
+
 // TODO remove for nibbleslice api TODO can be variable size
 fn encoded_nibble(ori: &[u8], is_leaf: bool) -> ElasticArray36<u8> {
 	let l = ori.len();
@@ -245,20 +246,20 @@ where
     self.0[depth] = (vec![CacheNode::None; NIBBLE_SIZE], 0, 0);
   }
 
-  fn encode_branch(&mut self, depth:usize, has_val: bool, cb_ext: &mut impl FnMut(Vec<u8>, bool) -> H::Out) -> Vec<u8>  {
+  fn encode_branch(&mut self, depth:usize, has_val: bool, cb_ext: &mut impl FnMut(Vec<u8>, bool) -> ChildReference<H::Out>) -> Vec<u8>  {
     C::branch_node(
       self.0[depth].0.iter().map(|v| 
         match v {
-          CacheNode::None => None,
-          CacheNode::Hash(ref h) => Some(trie::ChildReference::Hash(*h)),
+          CacheNode::Hash(ref h) => Some(clone_child_ref(h)), // TODO try to avoid that clone
           CacheNode::Ext(ref n, ref h) => {
             let mut n = n.to_vec();
             n.reverse();// TODO use proper encoded_nibble algo.
             let enc_nibble = encoded_nibble(&n[..], false); // not leaf!!
-            let encoded = C::ext_node(&enc_nibble[..], trie::ChildReference::Hash(*h));
+            let encoded = C::ext_node(&enc_nibble[..], clone_child_ref(h));
             let h = cb_ext(encoded, false);
-            Some(trie::ChildReference::Hash(h))
+            Some(h)
           },
+          CacheNode::None => None,
         }
       ), if has_val {
         std::mem::replace(&mut self.1[depth], None).map(|v|v.as_ref().into()) // TODO value could be a &[u8] instead of elastic!!
@@ -267,7 +268,7 @@ where
 
   fn flush_val (
     &mut self, //(64 * 16 size) 
-    cb_ext: &mut impl FnMut(Vec<u8>, bool) -> H::Out,
+    cb_ext: &mut impl FnMut(Vec<u8>, bool) -> ChildReference<H::Out>,
     target_depth: usize, 
     &(ref k2, ref v2): &(impl AsRef<[u8]>,impl AsRef<[u8]>), 
   ) {
@@ -285,7 +286,7 @@ where
 
   fn flush_branch(
     &mut self,
-    cb_ext: &mut impl FnMut(Vec<u8>, bool) -> H::Out,
+    cb_ext: &mut impl FnMut(Vec<u8>, bool) -> ChildReference<H::Out>,
     ref_branch: impl AsRef<[u8]> + Ord,
     new_depth: usize, 
     old_depth: usize, 
@@ -312,7 +313,7 @@ where
             n.push(unit as u8);
             n.reverse(); // TODO use proper encoded_nibble algo.
             let enc_nibble = encoded_nibble(&n[..], false);
-            let encoded = C::ext_node(&enc_nibble[..], trie::ChildReference::Hash(v_hash)); // TODO try rem clone
+            let encoded = C::ext_node(&enc_nibble[..], v_hash); // TODO try rem clone
             cb_ext(encoded, true);
           }
         } else {
@@ -323,7 +324,7 @@ where
             self.set_node(d-1, nibble as usize, CacheNode::Ext(vec![unit as u8], v_hash));
           } else {
             let enc_nibble = encoded_nibble(&[unit as u8], false);
-            let encoded = C::ext_node(&enc_nibble[..], trie::ChildReference::Hash(v_hash)); // TODO try rem clone
+            let encoded = C::ext_node(&enc_nibble[..], v_hash); // TODO try rem clone
             cb_ext(encoded, true);
           }
         }
@@ -345,22 +346,40 @@ where
 }
 
 // TODO try split struct
-#[derive(Clone,Debug)]
 enum CacheNode<HO> {
   None,
-  Hash(HO),
-  Ext(Vec<u8>,HO),// vec<u8> for nibble slice is not super good looking): TODO bench diff if explicitely boxed
+  Hash(ChildReference<HO>),
+  Ext(Vec<u8>,ChildReference<HO>),// vec<u8> for nibble slice is not super good looking): TODO bench diff if explicitely boxed
+}
+
+impl<HO: Clone> Clone for CacheNode<HO> {
+  fn clone(&self) -> Self {
+    match self {
+      CacheNode::None => CacheNode::None,
+      CacheNode::Hash(ChildReference::Hash(ref h)) => CacheNode::Hash(ChildReference::Hash(h.clone())),
+      CacheNode::Hash(ChildReference::Inline(ref h, s)) => CacheNode::Hash(ChildReference::Inline(h.clone(), *s)),
+      CacheNode::Ext(ref v, ChildReference::Hash(ref h)) => CacheNode::Ext(v.clone(), ChildReference::Hash(h.clone())),
+      CacheNode::Ext(ref v, ChildReference::Inline(ref h, s)) => CacheNode::Ext(v.clone(), ChildReference::Inline(h.clone(), *s)),
+    }
+  }
+}
+
+fn clone_child_ref<HO: Clone>(r: &ChildReference<HO>) -> ChildReference<HO> {
+  match r {
+    ChildReference::Hash(ref h) => ChildReference::Hash(h.clone()),
+    ChildReference::Inline(ref h, s) => ChildReference::Inline(h.clone(), *s),
+  }
 }
 
 impl<HO> CacheNode<HO> {
   // unsafe accessors TODO bench diff with safe one
-  fn hash(self) -> HO {
+  fn hash(self) -> ChildReference<HO> {
     if let CacheNode::Hash(h) = self {
       return h
     }
     unreachable!()
   }
-  fn ext(self) -> (Vec<u8>,HO) {
+  fn ext(self) -> (Vec<u8>,ChildReference<HO>) {
     if let CacheNode::Ext(n,h) = self {
       return (n,h)
     }
@@ -375,7 +394,7 @@ pub fn trie_visit<H, C, I, A, B, F>(input: I, cb_ext: &mut F)
     B: AsRef<[u8]>,
     H: Hasher,
     C: NodeCodec<H>,
-    F: FnMut(Vec<u8>, bool) -> H::Out
+    F: FnMut(Vec<u8>, bool) -> ChildReference<H::Out>
   {
   let mut depth_queue = CacheAccum::<H,C,B>::new();
   // compare iter ordering
@@ -423,6 +442,45 @@ pub fn trie_visit<H, C, I, A, B, F>(input: I, cb_ext: &mut F)
   }
 }
 
+#[macro_export]
+/// fn mut to feed a hash map with trie elements
+macro_rules! trie_db_builder {
+	($memdb: ident, $root_dest: ident) => {
+    |enc_ext: Vec<u8>, is_root: bool| {
+      if !is_root && enc_ext.len() < DEPTH/2 {
+        let l = enc_ext.len();
+        return ChildReference::Inline(enc_ext[..].into(), l);
+      }
+      let hash = $memdb.insert(&enc_ext[..]);
+      if is_root {
+        $root_dest = hash.clone();
+      };
+      ChildReference::Hash(hash)
+    };
+	}
+}
+
+#[macro_export]
+/// fn mut to feed a hash map with trie elements
+macro_rules! trie_root_only {
+	($hash_trait: ident, $root_dest: ident) => {
+    |enc_ext: Vec<u8>, is_root: bool| {
+      if !is_root && enc_ext.len() < DEPTH/2 {
+        let l = enc_ext.len();
+        return ChildReference::Inline(enc_ext[..].into(), l);
+      }
+      let hash = $hash_trait::hash(&enc_ext[..]);
+      if is_root {
+        $root_dest = hash.clone();
+      };
+      ChildReference::Hash(hash)
+    };
+	}
+}
+
+
+
+
 #[test]
 fn trie_full_block () {
 
@@ -463,17 +521,7 @@ fn trie_full_block () {
   };
 
   {
-    let mut cb = |enc_ext: Vec<u8>, is_root: bool| {
-      if !is_root && enc_ext.len() < DEPTH/2 {
-        unimplemented!("direct data not implemented");
-      }
- 
-        let hash = hashdb.insert(&enc_ext[..]);
-        if is_root {
-          root_new = hash.clone();
-        };
-        hash
-    };
+    let mut cb = trie_db_builder!(hashdb, root_new);
     let readerlm: rkv::Reader<Vec<u8>>  = env.read().unwrap();
     let mut iterlm = readerlm.iter_start(store.clone()).unwrap().map(|v|
       if let (k2,Ok(Some(rkv::Value::Blob(v2)))) = v {
@@ -510,22 +558,23 @@ fn root_extension () {
   ]);
 }
 
+#[test]
+fn root_extension_bis () {
+  compare_root(vec![
+    (vec![1u8,2u8,3u8,3u8],vec![8u8;32]),
+    (vec![1u8,2u8,3u8,4u8],vec![7u8;32]),
+  ]);
+}
+
+
+
 #[cfg(test)]
 fn compare_impl(data: Vec<(Vec<u8>,Vec<u8>)>) {
   let mut memdb = MemoryDB::<KeccakHasher, DBValue>::new();
   let mut hashdb = MemoryDB::<KeccakHasher, DBValue>::new();
   let mut root_new = H256::new();
   {
-    let mut cb = |enc_ext: Vec<u8>, is_root: bool| {
-      if !is_root && enc_ext.len() < DEPTH/2 {
-        unimplemented!("direct data not implemented");
-      }
-      let hash = hashdb.insert(&enc_ext[..]);
-      if is_root {
-        root_new = hash.clone();
-      };
-      hash
-    };
+    let mut cb = trie_db_builder!(hashdb, root_new);
     trie_visit::<KeccakHasher, RlpCodec, _, _, _, _>(data.clone().into_iter(), &mut cb);
   }
   let root = {
@@ -555,6 +604,27 @@ fn compare_impl(data: Vec<(Vec<u8>,Vec<u8>)>) {
   assert_eq!(root, root_new);
 }
 
+#[cfg(test)]
+fn compare_root(data: Vec<(Vec<u8>,Vec<u8>)>) {
+  let mut root_new = H256::new();
+  {
+    let mut cb = trie_root_only!(KeccakHasher, root_new);
+    trie_visit::<KeccakHasher, RlpCodec, _, _, _, _>(data.clone().into_iter(), &mut cb);
+  }
+  let mut memdb = MemoryDB::<KeccakHasher, DBValue>::new();
+  let root = {
+    let mut root = H256::new();
+    let mut t = TrieDBMut::new(&mut memdb, &mut root);
+    for i in 0..data.len() {
+      t.insert(&data[i].0[..],&data[i].1[..]);
+    }
+    let mut nbelt = 0;
+    t.root().clone()
+  };
+
+  assert_eq!(root, root_new);
+}
+
 #[test]
 fn trie_middle_node () {
   compare_impl(vec![
@@ -571,6 +641,17 @@ fn trie_middle_node2 () {
     (vec![1u8,2u8,3u8,4u8],vec![7u8;32]),
     (vec![1u8,2u8,3u8,5u8],vec![7u8;32]),
     (vec![1u8,2u8,3u8,5u8,3u8],vec![7u8;32]),
+  ]);
+}
+
+#[test]
+fn trie_middle_node2x () {
+  compare_impl(vec![
+    (vec![0u8,2u8,3u8,5u8,3u8],vec![1u8;2]),
+    (vec![1u8,2u8],vec![8u8;2]),
+    (vec![1u8,2u8,3u8,4u8],vec![7u8;2]),
+    (vec![1u8,2u8,3u8,5u8],vec![7u8;2]),
+    (vec![1u8,2u8,3u8,5u8,3u8],vec![7u8;2]),
   ]);
 }
 
