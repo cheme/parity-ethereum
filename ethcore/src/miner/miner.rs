@@ -1,18 +1,18 @@
-// Copyright 2015-2018 Parity Technologies (UK) Ltd.
-// This file is part of Parity.
+// Copyright 2015-2019 Parity Technologies (UK) Ltd.
+// This file is part of Parity Ethereum.
 
-// Parity is free software: you can redistribute it and/or modify
+// Parity Ethereum is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// Parity is distributed in the hope that it will be useful,
+// Parity Ethereum is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with Parity.  If not, see <http://www.gnu.org/licenses/>.
+// along with Parity Ethereum.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::cmp;
 use std::time::{Instant, Duration};
@@ -21,39 +21,43 @@ use std::sync::Arc;
 
 use ansi_term::Colour;
 use bytes::Bytes;
-use engines::{EthEngine, Seal};
-use error::{Error, ErrorKind, ExecutionError};
+use call_contract::CallContract;
 use ethcore_miner::gas_pricer::GasPricer;
 use ethcore_miner::pool::{self, TransactionQueue, VerifiedTransaction, QueueStatus, PrioritizationStrategy};
 #[cfg(feature = "work-notify")]
 use ethcore_miner::work_notify::NotifyWork;
 use ethereum_types::{H256, U256, Address};
+use ethkey::Password;
 use io::IoChannel;
+use miner::pool_client::{PoolClient, CachedNonceClient, NonceCache};
+use miner;
 use parking_lot::{Mutex, RwLock};
 use rayon::prelude::*;
-use transaction::{
+use types::transaction::{
 	self,
 	Action,
 	UnverifiedTransaction,
 	SignedTransaction,
 	PendingTransaction,
 };
+use types::BlockNumber;
+use types::block::Block;
+use types::header::Header;
+use types::receipt::RichReceipt;
 use using_queue::{UsingQueue, GetAction};
 
 use account_provider::{AccountProvider, SignError as AccountError};
-use block::{ClosedBlock, IsBlock, Block, SealedBlock};
+use block::{ClosedBlock, IsBlock, SealedBlock};
 use client::{
-	BlockChain, ChainInfo, CallContract, BlockProducer, SealedBlockImporter, Nonce, TransactionInfo, TransactionId
+	BlockChain, ChainInfo, BlockProducer, SealedBlockImporter, Nonce, TransactionInfo, TransactionId
 };
 use client::{BlockId, ClientIoMessage};
+use engines::{EthEngine, Seal};
+use error::{Error, ErrorKind};
+use executed::ExecutionError;
 use executive::contract_address;
-use header::{Header, BlockNumber};
-use miner;
-use miner::pool_client::{PoolClient, CachedNonceClient, NonceCache};
-use receipt::RichReceipt;
 use spec::Spec;
 use state::State;
-use ethkey::Password;
 
 /// Different possible definitions for pending transaction set.
 #[derive(Debug, PartialEq)]
@@ -136,6 +140,8 @@ pub struct MinerOptions {
 	/// will be invalid if mined.
 	pub infinite_pending_block: bool,
 
+	/// Prioritized Local Addresses
+	pub tx_queue_locals: HashSet<Address>,
 	/// Strategy to use for prioritizing transactions in the queue.
 	pub tx_queue_strategy: PrioritizationStrategy,
 	/// Simple senders penalization.
@@ -163,6 +169,7 @@ impl Default for MinerOptions {
 			work_queue_size: 20,
 			enable_resubmission: true,
 			infinite_pending_block: false,
+			tx_queue_locals: HashSet::new(),
 			tx_queue_strategy: PrioritizationStrategy::GasPriceOnly,
 			tx_queue_penalization: Penalization::Disabled,
 			tx_queue_no_unfamiliar_locals: false,
@@ -576,10 +583,9 @@ impl Miner {
 		trace!(target: "miner", "requires_reseal: sealing enabled");
 
 		// Disable sealing if there were no requests for SEALING_TIMEOUT_IN_BLOCKS
-		let had_requests = sealing.last_request.map(|last_request| {
-			best_block > last_request
-				&& best_block - last_request <= SEALING_TIMEOUT_IN_BLOCKS
-		}).unwrap_or(false);
+		let had_requests = sealing.last_request.map(|last_request|
+			best_block.saturating_sub(last_request) <= SEALING_TIMEOUT_IN_BLOCKS
+		).unwrap_or(false);
 
 		// keep sealing enabled if any of the conditions is met
 		let sealing_enabled = self.forced_sealing()
@@ -914,11 +920,13 @@ impl miner::MinerService for Miner {
 		pending: PendingTransaction,
 		trusted: bool
 	) -> Result<(), transaction::Error> {
-		// treat the tx as local if the option is enabled, or if we have the account
+		// treat the tx as local if the option is enabled, if we have the account, or if
+		// the account is specified as a Prioritized Local Addresses
 		let sender = pending.sender();
 		let treat_as_local = trusted
 			|| !self.options.tx_queue_no_unfamiliar_locals
-			|| self.accounts.as_ref().map(|accts| accts.has_account(sender)).unwrap_or(false);
+			|| self.accounts.as_ref().map(|accts| accts.has_account(sender)).unwrap_or(false)
+			|| self.options.tx_queue_locals.contains(&sender);
 
 		if treat_as_local {
 			self.import_own_transaction(chain, pending)
@@ -936,6 +944,10 @@ impl miner::MinerService for Miner {
 
 	fn queued_transactions(&self) -> Vec<Arc<VerifiedTransaction>> {
 		self.transaction_queue.all_transactions()
+	}
+
+	fn queued_transaction_hashes(&self) -> Vec<H256> {
+		self.transaction_queue.all_transaction_hashes()
 	}
 
 	fn pending_transaction_hashes<C>(&self, chain: &C) -> BTreeSet<H256> where
@@ -1189,7 +1201,6 @@ impl miner::MinerService for Miner {
 		let gas_limit = *chain.best_block_header().gas_limit();
 		self.update_transaction_queue_limits(gas_limit);
 
-
 		// Then import all transactions from retracted blocks.
 		let client = self.pool_client(chain);
 		{
@@ -1278,16 +1289,18 @@ impl miner::MinerService for Miner {
 
 #[cfg(test)]
 mod tests {
+	use std::iter::FromIterator;
+
 	use super::*;
 	use ethkey::{Generator, Random};
 	use hash::keccak;
-	use header::BlockNumber;
 	use rustc_hex::FromHex;
+	use types::BlockNumber;
 
 	use client::{TestBlockChainClient, EachBlockWith, ChainInfo, ImportSealedBlock};
 	use miner::{MinerService, PendingOrdering};
 	use test_helpers::{generate_dummy_client, generate_dummy_client_with_spec_and_accounts};
-	use transaction::{Transaction};
+	use types::transaction::{Transaction};
 
 	#[test]
 	fn should_prepare_block_to_seal() {
@@ -1336,6 +1349,7 @@ mod tests {
 				enable_resubmission: true,
 				infinite_pending_block: false,
 				tx_queue_penalization: Penalization::Disabled,
+				tx_queue_locals: HashSet::new(),
 				tx_queue_strategy: PrioritizationStrategy::GasPriceOnly,
 				tx_queue_no_unfamiliar_locals: false,
 				refuse_service_transactions: false,
@@ -1388,6 +1402,33 @@ mod tests {
 		assert_eq!(miner.ready_transactions(&client, 10, PendingOrdering::Priority).len(), 1);
 		// This method will let us know if pending block was created (before calling that method)
 		assert_eq!(miner.prepare_pending_block(&client), BlockPreparationStatus::NotPrepared);
+	}
+
+	#[test]
+	fn should_not_return_stale_work_packages() {
+		// given
+		let client = TestBlockChainClient::default();
+		let miner = miner();
+
+		// initial work package should create the pending block
+		let res = miner.work_package(&client);
+		assert_eq!(res.unwrap().1, 1);
+		// This should be true, since there were some requests.
+		assert_eq!(miner.requires_reseal(0), true);
+
+		// when new block is imported
+		let client = generate_dummy_client(2);
+		let imported = [0.into()];
+		let empty = &[];
+		miner.chain_new_blocks(&*client, &imported, empty, &imported, empty, false);
+
+		// then
+		// This should be false, because it's too early.
+		assert_eq!(miner.requires_reseal(2), false);
+		// but still work package should be ready
+		let res = miner.work_package(&*client);
+		assert_eq!(res.unwrap().1, 3);
+		assert_eq!(miner.prepare_pending_block(&*client), BlockPreparationStatus::NotPrepared);
 	}
 
 	#[test]
@@ -1474,6 +1515,38 @@ mod tests {
 		assert_eq!(miner.pending_transactions(best_block).unwrap().len(), 2);
 		assert_eq!(miner.pending_receipts(best_block).unwrap().len(), 2);
 		assert_eq!(miner.ready_transactions(&client, 10, PendingOrdering::Priority).len(), 2);
+		assert_eq!(miner.prepare_pending_block(&client), BlockPreparationStatus::NotPrepared);
+	}
+
+	#[test]
+	fn should_prioritize_locals() {
+		let keypair = Random.generate().unwrap();
+		let client = TestBlockChainClient::default();
+		let account_provider = AccountProvider::transient_provider();
+		account_provider.insert_account(keypair.secret().clone(), &"".into())
+		    .expect("can add accounts to the provider we just created");
+
+		let transaction = transaction();
+		let miner = Miner::new(
+			MinerOptions {
+				tx_queue_no_unfamiliar_locals: true, // should work even with this enabled
+				tx_queue_locals: HashSet::from_iter(vec![transaction.sender()].into_iter()),
+				..miner().options
+			},
+			GasPricer::new_fixed(0u64.into()),
+			&Spec::new_test(),
+			Some(Arc::new(account_provider)),
+		);
+		let best_block = 0;
+
+		// Miner with sender as a known local address should prioritize transactions from that address
+		let res2 = miner.import_claimed_local_transaction(&client, PendingTransaction::new(transaction, None), false);
+
+		// check to make sure the prioritized transaction is pending
+		assert_eq!(res2.unwrap(), ());
+		assert_eq!(miner.pending_transactions(best_block).unwrap().len(), 1);
+		assert_eq!(miner.pending_receipts(best_block).unwrap().len(), 1);
+		assert_eq!(miner.ready_transactions(&client, 10, PendingOrdering::Priority).len(), 1);
 		assert_eq!(miner.prepare_pending_block(&client), BlockPreparationStatus::NotPrepared);
 	}
 

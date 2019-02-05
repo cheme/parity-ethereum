@@ -1,24 +1,25 @@
-// Copyright 2015-2018 Parity Technologies (UK) Ltd.
-// This file is part of Parity.
+// Copyright 2015-2019 Parity Technologies (UK) Ltd.
+// This file is part of Parity Ethereum.
 
-// Parity is free software: you can redistribute it and/or modify
+// Parity Ethereum is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// Parity is distributed in the hope that it will be useful,
+// Parity Ethereum is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with Parity.  If not, see <http://www.gnu.org/licenses/>.
+// along with Parity Ethereum.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::time::Duration;
 use std::io::Read;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::collections::BTreeMap;
+use std::collections::{HashSet, BTreeMap};
+use std::iter::FromIterator;
 use std::cmp;
 use cli::{Args, ArgsError};
 use hash::keccak;
@@ -27,7 +28,7 @@ use parity_version::{version_data, version};
 use bytes::Bytes;
 use ansi_term::Colour;
 use sync::{NetworkConfiguration, validate_node_url, self};
-use ethcore::ethstore::ethkey::{Secret, Public};
+use ethstore::ethkey::{Secret, Public};
 use ethcore::client::{VMType};
 use ethcore::miner::{stratum, MinerOptions};
 use ethcore::snapshot::SnapshotConfiguration;
@@ -48,7 +49,7 @@ use ethcore_private_tx::{ProviderConfig, EncryptorConfig};
 use secretstore::{NodeSecretKey, Configuration as SecretStoreConfiguration, ContractAddress as SecretStoreContractAddress};
 use updater::{UpdatePolicy, UpdateFilter, ReleaseTrack};
 use run::RunCmd;
-use blockchain::{BlockchainCmd, ImportBlockchain, ExportBlockchain, KillBlockchain, ExportState, DataFormat};
+use blockchain::{BlockchainCmd, ImportBlockchain, ExportBlockchain, KillBlockchain, ExportState, DataFormat, ResetBlockchain};
 use export_hardcoded_sync::ExportHsyncCmd;
 use presale::ImportWallet;
 use account::{AccountCmd, NewAccount, ListAccounts, ImportAccounts, ImportFromGethAccounts};
@@ -138,6 +139,7 @@ impl Configuration {
 		let compaction = self.args.arg_db_compaction.parse()?;
 		let warp_sync = !self.args.flag_no_warp;
 		let geth_compatibility = self.args.flag_geth;
+		let experimental_rpcs = self.args.flag_jsonrpc_experimental;
 		let ipfs_conf = self.ipfs_config();
 		let secretstore_conf = self.secretstore_config()?;
 		let format = self.format()?;
@@ -175,6 +177,19 @@ impl Configuration {
 			}
 		} else if self.args.cmd_tools && self.args.cmd_tools_hash {
 			Cmd::Hash(self.args.arg_tools_hash_file)
+		} else if self.args.cmd_db && self.args.cmd_db_reset {
+			Cmd::Blockchain(BlockchainCmd::Reset(ResetBlockchain {
+				dirs,
+				spec,
+				pruning,
+				pruning_history,
+				pruning_memory: self.args.arg_pruning_memory,
+				tracing,
+				fat_db,
+				compaction,
+				cache_config,
+				num: self.args.arg_db_reset_num,
+			}))
 		} else if self.args.cmd_db && self.args.cmd_db_kill {
 			Cmd::Blockchain(BlockchainCmd::Kill(KillBlockchain {
 				spec: spec,
@@ -369,6 +384,7 @@ impl Configuration {
 				miner_extras: self.miner_extras()?,
 				stratum: self.stratum_options()?,
 				update_policy: update_policy,
+				allow_missing_blocks: self.args.flag_jsonrpc_allow_missing_blocks,
 				mode: mode,
 				tracing: tracing,
 				fat_db: fat_db,
@@ -377,6 +393,7 @@ impl Configuration {
 				warp_sync: warp_sync,
 				warp_barrier: self.args.arg_warp_barrier,
 				geth_compatibility: geth_compatibility,
+				experimental_rpcs,
 				net_settings: self.network_settings()?,
 				ipfs_conf: ipfs_conf,
 				secretstore_conf: secretstore_conf,
@@ -394,8 +411,11 @@ impl Configuration {
 				whisper: whisper_config,
 				no_hardcoded_sync: self.args.flag_no_hardcoded_sync,
 				max_round_blocks_to_import: self.args.arg_max_round_blocks_to_import,
-				on_demand_retry_count: self.args.arg_on_demand_retry_count,
-				on_demand_inactive_time_limit: self.args.arg_on_demand_inactive_time_limit,
+				on_demand_response_time_window: self.args.arg_on_demand_response_time_window,
+				on_demand_request_backoff_start: self.args.arg_on_demand_request_backoff_start,
+				on_demand_request_backoff_max: self.args.arg_on_demand_request_backoff_max,
+				on_demand_request_backoff_rounds_max: self.args.arg_on_demand_request_backoff_rounds_max,
+				on_demand_request_consecutive_failures: self.args.arg_on_demand_request_consecutive_failures,
 			};
 			Cmd::Run(run_cmd)
 		};
@@ -453,7 +473,8 @@ impl Configuration {
 		}
 	}
 
-	fn logger_config(&self) -> LogConfig {
+	/// returns logger config
+	pub fn logger_config(&self) -> LogConfig {
 		LogConfig {
 			mode: self.args.arg_logging.clone(),
 			color: !self.args.flag_no_color && !cfg!(windows),
@@ -469,6 +490,10 @@ impl Configuration {
 		};
 
 		Ok(name.parse()?)
+	}
+
+	fn is_dev_chain(&self) -> Result<bool, String> {
+		Ok(self.chain()? == SpecType::Dev)
 	}
 
 	fn max_peers(&self) -> u32 {
@@ -528,7 +553,7 @@ impl Configuration {
 	}
 
 	fn miner_options(&self) -> Result<MinerOptions, String> {
-		let is_dev_chain = self.chain()? == SpecType::Dev;
+		let is_dev_chain = self.is_dev_chain()?;
 		if is_dev_chain && self.args.flag_force_sealing && self.args.arg_reseal_min_period == 0 {
 			return Err("Force sealing can't be used with reseal_min_period = 0".into());
 		}
@@ -549,6 +574,7 @@ impl Configuration {
 			infinite_pending_block: self.args.flag_infinite_pending_block,
 
 			tx_queue_penalization: to_queue_penalization(self.args.arg_tx_time_limit)?,
+			tx_queue_locals: HashSet::from_iter(to_addresses(&self.args.arg_tx_queue_locals)?.into_iter()),
 			tx_queue_strategy: to_queue_strategy(&self.args.arg_tx_queue_strategy)?,
 			tx_queue_no_unfamiliar_locals: self.args.flag_tx_queue_no_unfamiliar_locals,
 			refuse_service_transactions: self.args.flag_refuse_service_transactions,
@@ -855,6 +881,7 @@ impl Configuration {
 				Some(max) if max > 0 => max as usize,
 				_ => 5usize,
 			},
+			keep_alive: !self.args.flag_jsonrpc_no_keep_alive,
 		};
 
 		Ok(conf)
@@ -921,6 +948,7 @@ impl Configuration {
 		Ok(NetworkSettings {
 			name: self.args.arg_identity.clone(),
 			chain: format!("{}", self.chain()?),
+			is_dev_chain: self.is_dev_chain()?,
 			network_port: net_addresses.0.port(),
 			rpc_enabled: http_conf.enabled,
 			rpc_interface: http_conf.interface,
@@ -1360,7 +1388,7 @@ mod tests {
 			support_token_api: true,
 			max_connections: 100,
 		}, LogConfig {
-			color: true,
+			color: !cfg!(windows),
 			mode: None,
 			file: None,
 		} ));
@@ -1382,6 +1410,7 @@ mod tests {
 		let args = vec!["parity"];
 		let conf = parse(&args);
 		let mut expected = RunCmd {
+			allow_missing_blocks: false,
 			cache_config: Default::default(),
 			dirs: Default::default(),
 			spec: Default::default(),
@@ -1418,6 +1447,7 @@ mod tests {
 			compaction: Default::default(),
 			vm_type: Default::default(),
 			geth_compatibility: false,
+			experimental_rpcs: false,
 			net_settings: Default::default(),
 			ipfs_conf: Default::default(),
 			secretstore_conf: Default::default(),
@@ -1438,8 +1468,11 @@ mod tests {
 			no_persistent_txqueue: false,
 			whisper: Default::default(),
 			max_round_blocks_to_import: 12,
-			on_demand_retry_count: None,
-			on_demand_inactive_time_limit: None,
+			on_demand_response_time_window: None,
+			on_demand_request_backoff_start: None,
+			on_demand_request_backoff_max: None,
+			on_demand_request_backoff_rounds_max: None,
+			on_demand_request_consecutive_failures: None,
 		};
 		expected.secretstore_conf.enabled = cfg!(feature = "secretstore");
 		expected.secretstore_conf.http_enabled = cfg!(feature = "secretstore");
@@ -1521,6 +1554,7 @@ mod tests {
 		assert_eq!(conf.network_settings(), Ok(NetworkSettings {
 			name: "testname".to_owned(),
 			chain: "kovan".to_owned(),
+			is_dev_chain: false,
 			network_port: 30303,
 			rpc_enabled: true,
 			rpc_interface: "127.0.0.1".to_owned(),
@@ -1871,13 +1905,15 @@ mod tests {
 
 	#[test]
 	fn should_use_correct_cache_path_if_base_is_set() {
+		use std::path;
+
 		let std = parse(&["parity"]);
 		let base = parse(&["parity", "--base-path", "/test"]);
 
 		let base_path = ::dir::default_data_path();
 		let local_path = ::dir::default_local_path();
 		assert_eq!(std.directories().cache, dir::helpers::replace_home_and_local(&base_path, &local_path, ::dir::CACHE_PATH));
-		assert_eq!(base.directories().cache, "/test/cache");
+		assert_eq!(path::Path::new(&base.directories().cache), path::Path::new("/test/cache"));
 	}
 
 	#[test]

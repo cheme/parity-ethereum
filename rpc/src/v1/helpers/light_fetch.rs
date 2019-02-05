@@ -1,30 +1,30 @@
-// Copyright 2015-2018 Parity Technologies (UK) Ltd.
-// This file is part of Parity.
+// Copyright 2015-2019 Parity Technologies (UK) Ltd.
+// This file is part of Parity Ethereum.
 
-// Parity is free software: you can redistribute it and/or modify
+// Parity Ethereum is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// Parity is distributed in the hope that it will be useful,
+// Parity Ethereum is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with Parity.  If not, see <http://www.gnu.org/licenses/>.
+// along with Parity Ethereum.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Helpers for fetching blockchain data either from the light client or the network.
 
 use std::cmp;
 use std::sync::Arc;
 
-use light::on_demand::error::Error as OnDemandError;
-use ethcore::basic_account::BasicAccount;
-use ethcore::encoded;
-use ethcore::filter::Filter as EthcoreFilter;
-use ethcore::ids::BlockId;
-use ethcore::receipt::Receipt;
+use types::basic_account::BasicAccount;
+use types::encoded;
+use types::filter::Filter as EthcoreFilter;
+use types::ids::BlockId;
+use types::receipt::Receipt;
+use ethcore::executed::ExecutionError;
 
 use jsonrpc_core::{Result, Error};
 use jsonrpc_core::futures::{future, Future};
@@ -38,6 +38,7 @@ use light::on_demand::{
 	request, OnDemand, HeaderRef, Request as OnDemandRequest,
 	Response as OnDemandResponse, ExecutionResult,
 };
+use light::on_demand::error::Error as OnDemandError;
 use light::request::Field;
 
 use sync::LightSync;
@@ -45,7 +46,8 @@ use ethereum_types::{U256, Address};
 use hash::H256;
 use parking_lot::Mutex;
 use fastmap::H256FastMap;
-use transaction::{Action, Transaction as EthTransaction, SignedTransaction, LocalizedTransaction};
+use std::collections::BTreeMap;
+use types::transaction::{Action, Transaction as EthTransaction, PendingTransaction, SignedTransaction, LocalizedTransaction};
 
 use v1::helpers::{CallRequest as CallRequestHelper, errors, dispatch};
 use v1::types::{BlockNumber, CallRequest, Log, Transaction};
@@ -53,6 +55,15 @@ use v1::types::{BlockNumber, CallRequest, Log, Transaction};
 const NO_INVALID_BACK_REFS_PROOF: &str = "Fails only on invalid back-references; back-references here known to be valid; qed";
 
 const WRONG_RESPONSE_AMOUNT_TYPE_PROOF: &str = "responses correspond directly with requests in amount and type; qed";
+
+pub fn light_all_transactions(dispatch: &Arc<dispatch::LightDispatcher>) -> impl Iterator<Item=PendingTransaction> {
+	let txq = dispatch.transaction_queue.read();
+	let chain_info = dispatch.client.chain_info();
+
+	let current = txq.ready_transactions(chain_info.best_block_number, chain_info.best_block_timestamp);
+	let future = txq.future_transactions(chain_info.best_block_number, chain_info.best_block_timestamp);
+	current.into_iter().chain(future.into_iter())
+}
 
 /// Helper for fetching blockchain data either from the light client or the network
 /// as necessary.
@@ -193,8 +204,8 @@ impl LightFetch {
 	/// Helper for getting proved execution.
 	pub fn proved_read_only_execution(&self, req: CallRequest, num: Trailing<BlockNumber>) -> impl Future<Item = ExecutionResult, Error = Error> + Send {
 		const DEFAULT_GAS_PRICE: u64 = 21_000;
-		// starting gas when gas not provided.
-		const START_GAS: u64 = 50_000;
+		// (21000 G_transaction + 32000 G_create + some marginal to allow a few operations)
+		const START_GAS: u64 = 60_000;
 
 		let (sync, on_demand, client) = (self.sync.clone(), self.on_demand.clone(), self.client.clone());
 		let req: CallRequestHelper = req.into();
@@ -300,9 +311,7 @@ impl LightFetch {
 		}))
 	}
 
-	/// Get transaction logs
-	pub fn logs(&self, filter: EthcoreFilter) -> impl Future<Item = Vec<Log>, Error = Error> + Send {
-		use std::collections::BTreeMap;
+	pub fn logs_no_tx_hash(&self, filter: EthcoreFilter) -> impl Future<Item = Vec<Log>, Error = Error> + Send {
 		use jsonrpc_core::futures::stream::{self, Stream};
 
 		const MAX_BLOCK_RANGE: u64 = 1000;
@@ -333,7 +342,7 @@ impl LightFetch {
 					// insert them into a BTreeMap to maintain order by number and block index.
 					stream::futures_unordered(receipts_futures)
 						.fold(BTreeMap::new(), move |mut matches, (num, hash, receipts)| {
-							let mut block_index = 0;
+							let mut block_index: usize = 0;
 							for (transaction_index, receipt) in receipts.into_iter().enumerate() {
 								for (transaction_log_index, log) in receipt.logs.into_iter().enumerate() {
 									if filter.matches(&log) {
@@ -356,15 +365,47 @@ impl LightFetch {
 								}
 							}
 							future::ok::<_,OnDemandError>(matches)
-						}) // and then collect them into a vector.
-						.map(|matches| matches.into_iter().map(|(_, v)| v).collect())
+						})
 						.map_err(errors::on_demand_error)
+						.map(|matches| matches.into_iter().map(|(_, v)| v).collect())
 				});
 
 				match maybe_future {
 					Some(fut) => Either::B(Either::A(fut)),
 					None => Either::B(Either::B(future::err(errors::network_disabled()))),
 				}
+			})
+	}
+
+	/// Get transaction logs
+	pub fn logs(&self, filter: EthcoreFilter) -> impl Future<Item = Vec<Log>, Error = Error> + Send {
+		use jsonrpc_core::futures::stream::{self, Stream};
+		let fetcher_block = self.clone();
+		self.logs_no_tx_hash(filter)
+			// retrieve transaction hash.
+			.and_then(move |mut result| {
+				let mut blocks = BTreeMap::new();
+				for log in result.iter() {
+						let block_hash = log.block_hash.as_ref().expect("Previously initialized with value; qed");
+						blocks.entry(block_hash.clone()).or_insert_with(|| {
+							fetcher_block.block(BlockId::Hash(block_hash.clone().into()))
+						});
+				}
+				// future get blocks (unordered it)
+				stream::futures_unordered(blocks.into_iter().map(|(_, v)| v)).collect().map(move |blocks| {
+					let transactions_per_block: BTreeMap<_, _> = blocks.iter()
+						.map(|block| (block.hash(), block.transactions())).collect();
+					for log in result.iter_mut() {
+						let log_index: U256 = log.transaction_index.expect("Previously initialized with value; qed").into();
+						let block_hash = log.block_hash.clone().expect("Previously initialized with value; qed").into();
+						let tx_hash = transactions_per_block.get(&block_hash)
+							// transaction index is from an enumerate call in log common so not need to check value
+							.and_then(|txs| txs.get(log_index.as_usize()))
+							.map(|tr| tr.hash().into());
+						log.transaction_hash = tx_hash;
+					}
+					result
+				})
 			})
 	}
 
@@ -606,28 +647,41 @@ struct ExecuteParams {
 	sync: Arc<LightSync>,
 }
 
-// has a peer execute the transaction with given params. If `gas_known` is false,
-// this will double the gas on each `OutOfGas` error.
+// Has a peer execute the transaction with given params. If `gas_known` is false, this will set the `gas value` to the
+// `required gas value` unless it exceeds the block gas limit
 fn execute_read_only_tx(gas_known: bool, params: ExecuteParams) -> impl Future<Item = ExecutionResult, Error = Error> + Send {
 	if !gas_known {
 		Box::new(future::loop_fn(params, |mut params| {
 			execute_read_only_tx(true, params.clone()).and_then(move |res| {
 				match res {
 					Ok(executed) => {
-						// TODO: how to distinguish between actual OOG and
-						// exception?
-						if executed.exception.is_some() {
-							let old_gas = params.tx.gas;
-							params.tx.gas = params.tx.gas * 2u32;
-							if params.tx.gas > params.hdr.gas_limit() {
-								params.tx.gas = old_gas;
+						// `OutOfGas` exception, try double the gas
+						if let Some(::vm::Error::OutOfGas) = executed.exception {
+							// block gas limit already tried, regard as an error and don't retry
+							if params.tx.gas >= params.hdr.gas_limit() {
+								trace!(target: "light_fetch", "OutOutGas exception received, gas increase: failed");
 							} else {
+								params.tx.gas = cmp::min(params.tx.gas * 2_u32, params.hdr.gas_limit());
+								trace!(target: "light_fetch", "OutOutGas exception received, gas increased to {}",
+									   params.tx.gas);
 								return Ok(future::Loop::Continue(params))
 							}
 						}
-
 						Ok(future::Loop::Break(Ok(executed)))
 					}
+					Err(ExecutionError::NotEnoughBaseGas { required, got }) => {
+						trace!(target: "light_fetch", "Not enough start gas provided required: {}, got: {}",
+							   required, got);
+						if required <= params.hdr.gas_limit() {
+							params.tx.gas = required;
+							return Ok(future::Loop::Continue(params))
+						} else {
+							warn!(target: "light_fetch",
+								  "Required gas is bigger than block header's gas dropping the request");
+							Ok(future::Loop::Break(Err(ExecutionError::NotEnoughBaseGas { required, got })))
+						}
+					}
+					// Non-recoverable execution error
 					failed => Ok(future::Loop::Break(failed)),
 				}
 			})

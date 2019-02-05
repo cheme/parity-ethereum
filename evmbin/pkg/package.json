@@ -12,5 +12,9 @@
   ],
   "module": "evmbin.js",
   "types": "evmbin.d.ts",
-  "sideEffects": "false"
+  "sideEffects": "false",
+  "devDependencies": {
+    "webpack": "^4.29.1",
+    "webpack-cli": "^3.2.3"
+  }
 }

@@ -19,6 +19,7 @@
 #![warn(missing_docs)]
 #![feature(proc_macro)]
 extern crate ethcore;
+extern crate common_types as types;
 extern crate ethjson;
 extern crate rustc_hex;
 extern crate serde;
@@ -27,7 +28,6 @@ extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
 extern crate docopt;
-extern crate ethcore_transaction as transaction;
 extern crate parity_bytes as bytes;
 extern crate ethereum_types;
 extern crate vm;
@@ -59,7 +59,7 @@ use docopt::Docopt;
 use rustc_hex::FromHex;
 use ethereum_types::{U256, Address};
 use bytes::Bytes;
-use ethcore::{spec, json_tests};
+use ethcore::{spec, json_tests, TrieSpec};
 use vm::{ActionParams, CallType};
 
 mod info;
@@ -103,14 +103,6 @@ General options:
     -h, --help         Display this message and exit.
 "#;
 
-/// Main entry point for a binary build
-pub fn main() {
-	panic_hook::set_abort();
-	env_logger::init();
-
-	execute(env::args());
-}
-
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub fn evmbin(params: Vec<JsValue>) {
@@ -124,35 +116,30 @@ pub fn evmbin(params: Vec<JsValue>) {
 	execute(params);
 }
 
-#[derive(Debug)]
-enum Error {
-	Docopt(docopt::Error),
-	Msg(String),
-}
+/// Main entry point for a binary build
+pub fn main() {
+	panic_hook::set_abort();
+	env_logger::init();
 
-impl From<docopt::Error> for Error {
-	fn from(err: docopt::Error) -> Self {
-		Error::Docopt(err)
-	}
-}
+	let args: Args = Docopt::new(USAGE).and_then(|d| d.deserialize()).unwrap_or_else(|e| e.exit());
 
-
-fn execute<S, I>(command: I) where I: IntoIterator<Item=S>, S: AsRef<str> {
-	let args: Args = Docopt::new(USAGE)
-		.and_then(|d| d.argv(command).deserialize()).unwrap_or_else(|e| e.exit());
-	
 	if args.cmd_state_test {
-		run_state_test(args);
+		run_state_test(args)
 	} else if args.cmd_stats_jsontests_vm {
-		run_stats_jsontests_vm(args);
+		run_stats_jsontests_vm(args)
 	} else if args.flag_json {
-		run_call(args, display::json::Informant::default());
-	} else if args.flag_std_json {
-		run_call(args, display::std_json::Informant::default());
+		run_call(args, display::json::Informant::default())
+	} else if args.flag_std_dump_json || args.flag_std_json {
+		if args.flag_std_err_only {
+			run_call(args, display::std_json::Informant::err_only())
+		} else if args.flag_std_out_only {
+			run_call(args, display::std_json::Informant::out_only())
+		} else {
+			run_call(args, display::std_json::Informant::default())
+		};
 	} else {
-		run_call(args, display::simple::Informant::default());
+		run_call(args, display::simple::Informant::default())
 	}
-
 }
 
 fn run_stats_jsontests_vm(args: Args) {
@@ -222,15 +209,23 @@ fn run_state_test(args: Args) {
 				let post_root = state.hash.into();
 				let transaction = multitransaction.select(&state.indexes).into();
 
-				if args.flag_json {
-					let i = display::json::Informant::default();
-					info::run_transaction(&name, idx, &spec, &pre, post_root, &env_info, transaction, i)
-				} else if args.flag_std_json {
-					let i = display::std_json::Informant::default();
-					info::run_transaction(&name, idx, &spec, &pre, post_root, &env_info, transaction, i)
+				let trie_spec = if args.flag_std_dump_json {
+					TrieSpec::Fat
 				} else {
-					let i = display::simple::Informant::default();
-					info::run_transaction(&name, idx, &spec, &pre, post_root, &env_info, transaction, i)
+					TrieSpec::Secure
+				};
+				if args.flag_json {
+					info::run_transaction(&name, idx, &spec, &pre, post_root, &env_info, transaction, display::json::Informant::default(), trie_spec)
+				} else if args.flag_std_dump_json || args.flag_std_json {
+					if args.flag_std_err_only {
+						info::run_transaction(&name, idx, &spec, &pre, post_root, &env_info, transaction, display::std_json::Informant::err_only(), trie_spec)
+					} else if args.flag_std_out_only {
+						info::run_transaction(&name, idx, &spec, &pre, post_root, &env_info, transaction, display::std_json::Informant::out_only(), trie_spec)
+					} else {
+						info::run_transaction(&name, idx, &spec, &pre, post_root, &env_info, transaction, display::std_json::Informant::default(), trie_spec)
+					}
+				} else {
+					info::run_transaction(&name, idx, &spec, &pre, post_root, &env_info, transaction, display::simple::Informant::default(), trie_spec)
 				}
 			}
 		}
@@ -261,8 +256,13 @@ fn run_call<T: Informant>(args: Args, informant: T) {
 	params.code = code.map(Arc::new);
 	params.data = data;
 
-	let result = info::run_action(&spec, params, informant);
-	T::finish(result);
+	let mut sink = informant.clone_sink();
+	let result = if args.flag_std_dump_json {
+		info::run_action(&spec, params, informant, TrieSpec::Fat)
+	} else {
+		info::run_action(&spec, params, informant, TrieSpec::Secure)
+	};
+	T::finish(result, &mut sink);
 }
 
 #[derive(Debug, Deserialize)]
@@ -281,6 +281,9 @@ struct Args {
 	flag_chain: Option<String>,
 	flag_json: bool,
 	flag_std_json: bool,
+	flag_std_dump_json: bool,
+	flag_std_err_only: bool,
+	flag_std_out_only: bool,
 }
 
 impl Args {
@@ -328,7 +331,7 @@ impl Args {
 
 	pub fn spec(&self) -> Result<spec::Spec, String> {
 		Ok(match self.flag_chain {
-			Some(ref filename) =>  {
+			Some(ref filename) => {
 				let file = fs::File::open(filename).map_err(|e| format!("{}", e))?;
 				spec::Spec::load(&envc::temp_dir(), file)?
 			},
@@ -367,17 +370,21 @@ mod tests {
 			"parity-evm",
 			"--json",
 			"--std-json",
+			"--std-dump-json",
 			"--gas", "1",
 			"--gas-price", "2",
 			"--from", "0000000000000000000000000000000000000003",
 			"--to", "0000000000000000000000000000000000000004",
 			"--code", "05",
 			"--input", "06",
-			"--chain", "./testfile",
+			"--chain", "./testfile", "--std-err-only", "--std-out-only"
 		]);
 
 		assert_eq!(args.flag_json, true);
 		assert_eq!(args.flag_std_json, true);
+		assert_eq!(args.flag_std_dump_json, true);
+		assert_eq!(args.flag_std_err_only, true);
+		assert_eq!(args.flag_std_out_only, true);
 		assert_eq!(args.gas(), Ok(1.into()));
 		assert_eq!(args.gas_price(), Ok(2.into()));
 		assert_eq!(args.from(), Ok(3.into()));
@@ -396,13 +403,15 @@ mod tests {
 			"--chain", "homestead",
 			"--only=add11",
 			"--json",
-			"--std-json"
+			"--std-json",
+			"--std-dump-json"
 		]);
 
 		assert_eq!(args.cmd_state_test, true);
 		assert!(args.arg_file.is_some());
 		assert_eq!(args.flag_json, true);
 		assert_eq!(args.flag_std_json, true);
+		assert_eq!(args.flag_std_dump_json, true);
 		assert_eq!(args.flag_chain, Some("homestead".to_owned()));
 		assert_eq!(args.flag_only, Some("add11".to_owned()));
 	}

@@ -1,18 +1,18 @@
-// Copyright 2015-2018 Parity Technologies (UK) Ltd.
-// This file is part of Parity.
+// Copyright 2015-2019 Parity Technologies (UK) Ltd.
+// This file is part of Parity Ethereum.
 
-// Parity is free software: you can redistribute it and/or modify
+// Parity Ethereum is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// Parity is distributed in the hope that it will be useful,
+// Parity Ethereum is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with Parity.  If not, see <http://www.gnu.org/licenses/>.
+// along with Parity Ethereum.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -23,8 +23,8 @@ use miner::Miner;
 use io::IoChannel;
 use test_helpers;
 use verification::queue::kind::blocks::Unverified;
+use verification::VerifierType;
 use super::SKIP_TEST_STATE;
-
 use super::HookType;
 
 /// Run chain jsontests on a given folder.
@@ -42,7 +42,7 @@ fn skip_test(name: &String) -> bool {
 }
 
 pub fn json_chain_test<H: FnMut(&str, HookType)>(json_data: &[u8], start_stop_hook: &mut H) -> Vec<String> {
-	::ethcore_logger::init_log();
+	let _ = ::env_logger::try_init();
 	let tests = ethjson::blockchain::Test::load(json_data).unwrap();
 	let mut failed = Vec::new();
 
@@ -84,6 +84,10 @@ pub fn json_chain_test<H: FnMut(&str, HookType)>(json_data: &[u8], start_stop_ho
 			{
 				let db = test_helpers::new_db();
 				let mut config = ClientConfig::default();
+				if ethjson::blockchain::Engine::NoProof == blockchain.engine {
+					config.verifier_type = VerifierType::CanonNoSeal;
+					config.check_seal = false;
+				}
 				config.history = 8;
 				let client = Client::new(
 					config,
@@ -184,6 +188,7 @@ mod block_tests {
 	declare_test!{BlockchainTests_GeneralStateTest_stZeroCallsTest, "BlockchainTests/GeneralStateTests/stZeroCallsTest/"}
 	declare_test!{BlockchainTests_GeneralStateTest_stZeroKnowledge, "BlockchainTests/GeneralStateTests/stZeroKnowledge/"}
 	declare_test!{BlockchainTests_GeneralStateTest_stZeroKnowledge2, "BlockchainTests/GeneralStateTests/stZeroKnowledge2/"}
+	declare_test!{BlockchainTests_GeneralStateTest_stSStoreTest, "BlockchainTests/GeneralStateTests/stSStoreTest/"}
 
 	declare_test!{BlockchainTests_TransitionTests_bcEIP158ToByzantium, "BlockchainTests/TransitionTests/bcEIP158ToByzantium/"}
 	declare_test!{BlockchainTests_TransitionTests_bcFrontierToHomestead, "BlockchainTests/TransitionTests/bcFrontierToHomestead/"}

@@ -1,18 +1,18 @@
-// Copyright 2015-2018 Parity Technologies (UK) Ltd.
-// This file is part of Parity.
+// Copyright 2015-2019 Parity Technologies (UK) Ltd.
+// This file is part of Parity Ethereum.
 
-// Parity is free software: you can redistribute it and/or modify
+// Parity Ethereum is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// Parity is distributed in the hope that it will be useful,
+// Parity Ethereum is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with Parity.  If not, see <http://www.gnu.org/licenses/>.
+// along with Parity Ethereum.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Parameters for a block chain.
 
@@ -29,18 +29,19 @@ use memorydb::MemoryDB;
 use parking_lot::RwLock;
 use rlp::{Rlp, RlpStream};
 use rustc_hex::{FromHex, ToHex};
+use types::BlockNumber;
+use types::encoded;
+use types::header::Header;
 use vm::{EnvInfo, CallType, ActionValue, ActionParams, ParamsType};
 
 use builtin::Builtin;
-use encoded;
 use engines::{
 	EthEngine, NullEngine, InstantSeal, InstantSealParams, BasicAuthority,
-	AuthorityRound, Tendermint, DEFAULT_BLOCKHASH_CONTRACT
+	AuthorityRound, DEFAULT_BLOCKHASH_CONTRACT
 };
 use error::Error;
 use executive::Executive;
 use factory::Factories;
-use header::{BlockNumber, Header};
 use machine::EthereumMachine;
 use pod_state::PodState;
 use spec::Genesis;
@@ -120,6 +121,8 @@ pub struct CommonParams {
 	pub eip1052_transition: BlockNumber,
 	/// Number of first block where EIP-1283 rules begin.
 	pub eip1283_transition: BlockNumber,
+	/// Number of first block where EIP-1283 rules end.
+	pub eip1283_disable_transition: BlockNumber,
 	/// Number of first block where EIP-1014 rules begin.
 	pub eip1014_transition: BlockNumber,
 	/// Number of first block where dust cleanup rules (EIP-168 and EIP169) begin.
@@ -188,7 +191,7 @@ impl CommonParams {
 		schedule.have_return_data = block_number >= self.eip211_transition;
 		schedule.have_bitwise_shifting = block_number >= self.eip145_transition;
 		schedule.have_extcodehash = block_number >= self.eip1052_transition;
-		schedule.eip1283 = block_number >= self.eip1283_transition;
+		schedule.eip1283 = block_number >= self.eip1283_transition && !(block_number >= self.eip1283_disable_transition);
 		if block_number >= self.eip210_transition {
 			schedule.blockhash_gas = 800;
 		}
@@ -250,7 +253,10 @@ impl From<ethjson::spec::Params> for CommonParams {
 			eip160_transition: p.eip160_transition.map_or(0, Into::into),
 			eip161abc_transition: p.eip161abc_transition.map_or(0, Into::into),
 			eip161d_transition: p.eip161d_transition.map_or(0, Into::into),
-			eip98_transition: p.eip98_transition.map_or(0, Into::into),
+			eip98_transition: p.eip98_transition.map_or_else(
+				BlockNumber::max_value,
+				Into::into,
+			),
 			eip155_transition: p.eip155_transition.map_or(0, Into::into),
 			validate_receipts_transition: p.validate_receipts_transition.map_or(0, Into::into),
 			validate_chain_id_transition: p.validate_chain_id_transition.map_or(0, Into::into),
@@ -293,6 +299,10 @@ impl From<ethjson::spec::Params> for CommonParams {
 				Into::into,
 			),
 			eip1283_transition: p.eip1283_transition.map_or_else(
+				BlockNumber::max_value,
+				Into::into,
+			),
+			eip1283_disable_transition: p.eip1283_disable_transition.map_or_else(
 				BlockNumber::max_value,
 				Into::into,
 			),
@@ -563,7 +573,7 @@ macro_rules! load_bundled {
 	};
 }
 
-#[cfg(any(test, feature = "test-helpers-no-rocksdb"))]
+#[cfg(any(test, feature = "test-helpers"))]
 macro_rules! load_machine_bundled {
 	($e:expr) => {
 		Spec::load_machine(
@@ -604,8 +614,6 @@ impl Spec {
 			ethjson::spec::Engine::BasicAuthority(basic_authority) => Arc::new(BasicAuthority::new(basic_authority.params.into(), machine)),
 			ethjson::spec::Engine::AuthorityRound(authority_round) => AuthorityRound::new(authority_round.params.into(), machine)
 				.expect("Failed to start AuthorityRound consensus engine."),
-			ethjson::spec::Engine::Tendermint(tendermint) => Tendermint::new(tendermint.params.into(), machine)
-				.expect("Failed to start the Tendermint consensus engine."),
 		}
 	}
 
@@ -839,7 +847,7 @@ impl Spec {
 	/// initialize genesis epoch data, using in-memory database for
 	/// constructor.
 	pub fn genesis_epoch_data(&self) -> Result<Vec<u8>, String> {
-		use transaction::{Action, Transaction};
+		use types::transaction::{Action, Transaction};
 		use journaldb;
 		use kvdb_memorydb;
 
@@ -902,28 +910,28 @@ impl Spec {
 
 	/// Create a new Spec which conforms to the Frontier-era Morden chain except that it's a
 	/// NullEngine consensus.
-	#[cfg(any(test, feature = "test-helpers-no-rocksdb"))]
+	#[cfg(any(test, feature = "test-helpers"))]
 	pub fn new_test() -> Spec {
 		load_bundled!("null_morden")
 	}
 
 	/// Create the EthereumMachine corresponding to Spec::new_test.
-	#[cfg(any(test, feature = "test-helpers-no-rocksdb"))]
+	#[cfg(any(test, feature = "test-helpers"))]
 	pub fn new_test_machine() -> EthereumMachine { load_machine_bundled!("null_morden") }
 
 	/// Create a new Spec which conforms to the Frontier-era Morden chain except that it's a NullEngine consensus with applying reward on block close.
-	#[cfg(any(test, feature = "test-helpers-no-rocksdb"))]
+	#[cfg(any(test, feature = "test-helpers"))]
 	pub fn new_test_with_reward() -> Spec { load_bundled!("null_morden_with_reward") }
 
 	/// Create a new Spec which is a NullEngine consensus with a premine of address whose
 	/// secret is keccak('').
-	#[cfg(any(test, feature = "test-helpers-no-rocksdb"))]
+	#[cfg(any(test, feature = "test-helpers"))]
 	pub fn new_null() -> Spec {
 		load_bundled!("null")
 	}
 
 	/// Create a new Spec which constructs a contract at address 5 with storage at 0 equal to 1.
-	#[cfg(any(test, feature = "test-helpers-no-rocksdb"))]
+	#[cfg(any(test, feature = "test-helpers"))]
 	pub fn new_test_constructor() -> Spec {
 		load_bundled!("constructor")
 	}
@@ -931,7 +939,7 @@ impl Spec {
 	/// Create a new Spec with AuthorityRound consensus which does internal sealing (not
 	/// requiring work).
 	/// Accounts with secrets keccak("0") and keccak("1") are the validators.
-	#[cfg(any(test, feature = "test-helpers-no-rocksdb"))]
+	#[cfg(any(test, feature = "test-helpers"))]
 	pub fn new_test_round() -> Self {
 		load_bundled!("authority_round")
 	}
@@ -939,7 +947,7 @@ impl Spec {
 	/// Create a new Spec with AuthorityRound consensus which does internal sealing (not
 	/// requiring work) with empty step messages enabled.
 	/// Accounts with secrets keccak("0") and keccak("1") are the validators.
-	#[cfg(any(test, feature = "test-helpers-no-rocksdb"))]
+	#[cfg(any(test, feature = "test-helpers"))]
 	pub fn new_test_round_empty_steps() -> Self {
 		load_bundled!("authority_round_empty_steps")
 	}
@@ -947,17 +955,9 @@ impl Spec {
 	/// Create a new Spec with AuthorityRound consensus (with empty steps) using a block reward
 	/// contract. The contract source code can be found at:
 	/// https://github.com/parity-contracts/block-reward/blob/daf7d44383b6cdb11cb6b953b018648e2b027cfb/contracts/ExampleBlockReward.sol
-	#[cfg(any(test, feature = "test-helpers-no-rocksdb"))]
+	#[cfg(any(test, feature = "test-helpers"))]
 	pub fn new_test_round_block_reward_contract() -> Self {
 		load_bundled!("authority_round_block_reward_contract")
-	}
-
-	/// Create a new Spec with Tendermint consensus which does internal sealing (not requiring
-	/// work).
-	/// Account keccak("0") and keccak("1") are a authorities.
-	#[cfg(any(test, feature = "test-helpers-no-rocksdb"))]
-	pub fn new_test_tendermint() -> Self {
-		load_bundled!("tendermint")
 	}
 
 	/// TestList.sol used in both specs: https://github.com/paritytech/contracts/pull/30/files
@@ -968,7 +968,7 @@ impl Spec {
 	/// "0xbfc708a000000000000000000000000082a978b3f5962a5b0957d9ee9eef472ee55b42f1" and added
 	/// back in using
 	/// "0x4d238c8e00000000000000000000000082a978b3f5962a5b0957d9ee9eef472ee55b42f1".
-	#[cfg(any(test, feature = "test-helpers-no-rocksdb"))]
+	#[cfg(any(test, feature = "test-helpers"))]
 	pub fn new_validator_safe_contract() -> Self {
 		load_bundled!("validator_safe_contract")
 	}
@@ -976,7 +976,7 @@ impl Spec {
 	/// The same as the `safeContract`, but allows reporting and uses AuthorityRound.
 	/// Account is marked with `reportBenign` it can be checked as disliked with "0xd8f2e0bf".
 	/// Validator can be removed with `reportMalicious`.
-	#[cfg(any(test, feature = "test-helpers-no-rocksdb"))]
+	#[cfg(any(test, feature = "test-helpers"))]
 	pub fn new_validator_contract() -> Self {
 		load_bundled!("validator_contract")
 	}
@@ -985,7 +985,7 @@ impl Spec {
 	/// height.
 	/// Account with secrets keccak("0") is the validator for block 1 and with keccak("1")
 	/// onwards.
-	#[cfg(any(test, feature = "test-helpers-no-rocksdb"))]
+	#[cfg(any(test, feature = "test-helpers"))]
 	pub fn new_validator_multi() -> Self {
 		load_bundled!("validator_multi")
 	}
@@ -996,8 +996,9 @@ mod tests {
 	use super::*;
 	use state::State;
 	use test_helpers::get_temp_state_db;
-	use views::BlockView;
 	use parity_wasm_compat::tempdir::TempDir;
+	use types::view;
+	use types::views::BlockView;
 
 	// https://github.com/paritytech/parity-ethereum/issues/1840
 	#[test]
@@ -1023,7 +1024,7 @@ mod tests {
 
 	#[test]
 	fn genesis_constructor() {
-		::ethcore_logger::init_log();
+		let _ = ::env_logger::try_init();
 		let spec = Spec::new_test_constructor();
 		let db = spec.ensure_db_good(get_temp_state_db(), &Default::default())
 			.unwrap();

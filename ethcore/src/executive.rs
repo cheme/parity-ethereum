@@ -1,18 +1,18 @@
-// Copyright 2015-2018 Parity Technologies (UK) Ltd.
-// This file is part of Parity.
+// Copyright 2015-2019 Parity Technologies (UK) Ltd.
+// This file is part of Parity Ethereum.
 
-// Parity is free software: you can redistribute it and/or modify
+// Parity Ethereum is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// Parity is distributed in the hope that it will be useful,
+// Parity Ethereum is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with Parity.  If not, see <http://www.gnu.org/licenses/>.
+// along with Parity Ethereum.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Transaction Execution environment.
 use std::cmp;
@@ -21,7 +21,7 @@ use hash::keccak;
 use ethereum_types::{H256, U256, U512, Address};
 use bytes::{Bytes, BytesRef};
 use state::{Backend as StateBackend, State, Substate, CleanupMode};
-use error::ExecutionError;
+use executed::ExecutionError;
 use machine::EthereumMachine as Machine;
 use evm::{CallType, Finalize, FinalizationResult};
 use vm::{
@@ -31,9 +31,12 @@ use vm::{
 use factory::VmFactory;
 use externalities::*;
 use trace::{self, Tracer, VMTracer};
-use transaction::{Action, SignedTransaction};
+use types::transaction::{Action, SignedTransaction};
+use transaction_ext::Transaction;
 use crossbeam;
 pub use executed::{Executed, ExecutionResult};
+
+use ::io::LOCAL_STACK_SIZE;
 
 #[cfg(debug_assertions)]
 /// Roughly estimate what stack size each level of evm depth will use. (Debug build)
@@ -969,7 +972,7 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
 		tracer: &mut T,
 		vm_tracer: &mut V
 	) -> vm::Result<FinalizationResult> where T: Tracer, V: VMTracer {
-		let local_stack_size = ::io::LOCAL_STACK_SIZE.with(|sz| sz.get());
+		let local_stack_size = LOCAL_STACK_SIZE.with(|sz| sz.get());
 		let depth_threshold = local_stack_size.saturating_sub(STACK_SIZE_ENTRY_OVERHEAD) / STACK_SIZE_PER_DEPTH;
 
 		if stack_depth != depth_threshold {
@@ -979,7 +982,7 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
 				scope.builder().stack_size(::std::cmp::max(self.schedule.max_depth.saturating_sub(depth_threshold) * STACK_SIZE_PER_DEPTH, local_stack_size)).spawn(move || {
 					self.call_with_stack_depth(params, substate, stack_depth, tracer, vm_tracer)
 				}).expect("Sub-thread creation cannot fail; the host might run out of resources; qed")
-			}).join()
+			}).join().expect("Sub-thread never panics; qed")
 		}
 	}
 
@@ -1053,7 +1056,7 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
 		tracer: &mut T,
 		vm_tracer: &mut V,
 	) -> vm::Result<FinalizationResult> where T: Tracer, V: VMTracer {
-		let local_stack_size = ::io::LOCAL_STACK_SIZE.with(|sz| sz.get());
+		let local_stack_size = LOCAL_STACK_SIZE.with(|sz| sz.get());
 		let depth_threshold = local_stack_size.saturating_sub(STACK_SIZE_ENTRY_OVERHEAD) / STACK_SIZE_PER_DEPTH;
 
 		if stack_depth != depth_threshold {
@@ -1063,7 +1066,7 @@ impl<'a, B: 'a + StateBackend> Executive<'a, B> {
 				scope.builder().stack_size(::std::cmp::max(self.schedule.max_depth.saturating_sub(depth_threshold) * STACK_SIZE_PER_DEPTH, local_stack_size)).spawn(move || {
 					self.create_with_stack_depth(params, substate, stack_depth, tracer, vm_tracer)
 				}).expect("Sub-thread creation cannot fail; the host might run out of resources; qed")
-			}).join()
+			}).join().expect("Sub-thread never panics; qed")
 		}
 	}
 
@@ -1179,7 +1182,7 @@ mod tests {
 	use trace::trace;
 	use trace::{FlatTrace, Tracer, NoopTracer, ExecutiveTracer};
 	use trace::{VMTrace, VMOperation, VMExecutedOperation, MemoryDiff, StorageDiff, VMTracer, NoopVMTracer, ExecutiveVMTracer};
-	use transaction::{Action, Transaction};
+	use types::transaction::{Action, Transaction};
 
 	fn make_frontier_machine(max_depth: usize) -> EthereumMachine {
 		let mut machine = ::ethereum::new_frontier_test_machine();

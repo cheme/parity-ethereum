@@ -1,18 +1,18 @@
-// Copyright 2015-2018 Parity Technologies (UK) Ltd.
-// This file is part of Parity.
+// Copyright 2015-2019 Parity Technologies (UK) Ltd.
+// This file is part of Parity Ethereum.
 
-// Parity is free software: you can redistribute it and/or modify
+// Parity Ethereum is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
-// Parity is distributed in the hope that it will be useful,
+// Parity Ethereum is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License
-// along with Parity.  If not, see <http://www.gnu.org/licenses/>.
+// along with Parity Ethereum.  If not, see <http://www.gnu.org/licenses/>.
 
 //! Ethereum Transaction Queue
 
@@ -23,8 +23,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use ethereum_types::{H256, U256, Address};
 use parking_lot::RwLock;
-use transaction;
 use txpool::{self, Verifier};
+use types::transaction;
 
 use pool::{
 	self, scoring, verifier, client, ready, listener,
@@ -313,6 +313,12 @@ impl TransactionQueue {
 	pub fn all_transactions(&self) -> Vec<Arc<pool::VerifiedTransaction>> {
 		let ready = |_tx: &pool::VerifiedTransaction| txpool::Readiness::Ready;
 		self.pool.read().unordered_pending(ready).collect()
+	}
+
+	/// Returns all transaction hashes in the queue without explicit ordering.
+	pub fn all_transaction_hashes(&self) -> Vec<H256> {
+		let ready = |_tx: &pool::VerifiedTransaction| txpool::Readiness::Ready;
+		self.pool.read().unordered_pending(ready).map(|tx| tx.hash).collect()
 	}
 
 	/// Computes unordered set of pending hashes.
