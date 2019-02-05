@@ -26,12 +26,14 @@ pub enum GasPricer {
 	/// A fixed gas price in terms of Wei - always the argument given.
 	Fixed(U256),
 	/// Gas price is calibrated according to a fixed amount of USD.
+  #[cfg(not(target_arch = "wasm32"))]
 	#[cfg(feature = "price-info")]
 	Calibrated(GasPriceCalibrator),
 }
 
 impl GasPricer {
 	/// Create a new Calibrated `GasPricer`.
+  #[cfg(not(target_arch = "wasm32"))]
 	#[cfg(feature = "price-info")]
 	pub fn new_calibrated(calibrator: GasPriceCalibrator) -> GasPricer {
 		GasPricer::Calibrated(calibrator)
@@ -46,6 +48,7 @@ impl GasPricer {
 	pub fn recalibrate<F: FnOnce(U256) + Sync + Send + 'static>(&mut self, set_price: F) {
 		match *self {
 			GasPricer::Fixed(ref max) => set_price(max.clone()),
+      #[cfg(not(target_arch = "wasm32"))]
 			#[cfg(feature = "price-info")]
 			GasPricer::Calibrated(ref mut cal) => cal.recalibrate(set_price),
 		}

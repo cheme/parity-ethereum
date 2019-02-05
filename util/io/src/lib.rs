@@ -69,6 +69,7 @@
 //TODO: use Poll from mio
 #![allow(deprecated)]
 
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg(feature = "mio")]
 extern crate mio;
 #[macro_use]
@@ -80,20 +81,25 @@ extern crate num_cpus;
 extern crate timer;
 extern crate fnv;
 extern crate time;
+#[cfg(not(target_arch = "wasm32"))]
 extern crate tokio;
 extern crate futures;
 
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg(feature = "mio")]
 mod service_mio;
-#[cfg(not(feature = "mio"))]
+#[cfg(any(not(feature = "mio"), target_arch = "wasm32"))]
 mod service_non_mio;
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg(feature = "mio")]
 mod worker;
 
 use std::cell::Cell;
 use std::{fmt, error};
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg(feature = "mio")]
 use mio::deprecated::{EventLoop, NotifyError};
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg(feature = "mio")]
 use mio::Token;
 
@@ -138,6 +144,7 @@ impl From<::std::io::Error> for IoError {
 	}
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg(feature = "mio")]
 impl<Message> From<NotifyError<service_mio::IoMessage<Message>>> for IoError where Message: Send {
 	fn from(_err: NotifyError<service_mio::IoMessage<Message>>) -> IoError {
@@ -156,30 +163,38 @@ pub trait IoHandler<Message>: Send + Sync where Message: Send + Sync + 'static {
 	/// Called when a broadcasted message is received. The message can only be sent from a different IO handler.
 	fn message(&self, _io: &IoContext<Message>, _message: &Message) {}
 	/// Called when an IO stream gets closed
+  #[cfg(not(target_arch = "wasm32"))]
 	#[cfg(feature = "mio")]
 	fn stream_hup(&self, _io: &IoContext<Message>, _stream: StreamToken) {}
 	/// Called when an IO stream can be read from
+  #[cfg(not(target_arch = "wasm32"))]
 	#[cfg(feature = "mio")]
 	fn stream_readable(&self, _io: &IoContext<Message>, _stream: StreamToken) {}
 	/// Called when an IO stream can be written to
+  #[cfg(not(target_arch = "wasm32"))]
 	#[cfg(feature = "mio")]
 	fn stream_writable(&self, _io: &IoContext<Message>, _stream: StreamToken) {}
 	/// Register a new stream with the event loop
+  #[cfg(not(target_arch = "wasm32"))]
 	#[cfg(feature = "mio")]
 	fn register_stream(&self, _stream: StreamToken, _reg: Token, _event_loop: &mut EventLoop<IoManager<Message>>) {}
 	/// Re-register a stream with the event loop
+  #[cfg(not(target_arch = "wasm32"))]
 	#[cfg(feature = "mio")]
 	fn update_stream(&self, _stream: StreamToken, _reg: Token, _event_loop: &mut EventLoop<IoManager<Message>>) {}
 	/// Deregister a stream. Called whenstream is removed from event loop
+  #[cfg(not(target_arch = "wasm32"))]
 	#[cfg(feature = "mio")]
 	fn deregister_stream(&self, _stream: StreamToken, _event_loop: &mut EventLoop<IoManager<Message>>) {}
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg(feature = "mio")]
 pub use service_mio::{TimerToken, StreamToken, IoContext, IoService, IoChannel, IoManager, TOKENS_PER_HANDLER};
-#[cfg(not(feature = "mio"))]
+#[cfg(any(not(feature = "mio"), target_arch = "wasm32"))]
 pub use service_non_mio::{TimerToken, IoContext, IoService, IoChannel, TOKENS_PER_HANDLER};
 
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg(test)]
 mod tests {
 	use std::sync::Arc;

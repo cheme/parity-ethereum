@@ -20,7 +20,6 @@ mod ancient_import;
 mod bad_blocks;
 mod client;
 mod config;
-#[cfg(not(target_arch = "wasm32"))]
 #[cfg(any(test, feature = "test-helpers"))]
 mod evm_test_client;
 mod io_message;
@@ -31,7 +30,6 @@ mod trace;
 
 pub use self::client::*;
 pub use self::config::{Mode, ClientConfig, DatabaseCompactionProfile, BlockChainConfig, VMType};
-#[cfg(not(target_arch = "wasm32"))]
 #[cfg(any(test, feature = "test-helpers"))]
 pub use self::evm_test_client::{EvmTestClient, EvmTestError, TransactResult};
 pub use self::io_message::ClientIoMessage;

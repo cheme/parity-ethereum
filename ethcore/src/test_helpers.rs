@@ -29,6 +29,7 @@ use evm::Factory as EvmFactory;
 use hash::keccak;
 use io::IoChannel;
 use kvdb::KeyValueDB;
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg(any(test, feature = "test-helpers"))]
 use kvdb_rocksdb::{self, Database, DatabaseConfig};
 use parking_lot::RwLock;
@@ -306,6 +307,7 @@ pub fn new_db() -> Arc<BlockChainDB> {
 	Arc::new(db)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg(any(test, feature = "test-helpers"))]
 /// Creates a new temporary `BlockChainDB` on FS
 pub fn new_temp_db(tempdir: &Path) -> Arc<BlockChainDB> {
@@ -327,6 +329,7 @@ pub fn new_temp_db(tempdir: &Path) -> Arc<BlockChainDB> {
 	Arc::new(db)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg(any(test, feature = "test-helpers"))]
 /// Creates new instance of KeyValueDBHandler
 pub fn restoration_db_handler(config: kvdb_rocksdb::DatabaseConfig) -> Box<BlockChainDBHandler> {

@@ -22,6 +22,7 @@
 mod miner;
 
 pub mod pool_client;
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg(feature = "stratum")]
 pub mod stratum;
 

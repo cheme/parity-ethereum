@@ -109,6 +109,7 @@ extern crate using_queue;
 extern crate vm;
 extern crate wasm;
 
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg(feature = "stratum")]
 extern crate ethcore_stratum;
 #[cfg(any(test, feature = "tempdir"))]
@@ -181,7 +182,6 @@ mod tx_filter;
 mod tests;
 #[cfg(feature = "json-tests")]
 pub mod json_tests;
-#[cfg(not(target_arch = "wasm32"))]
 #[cfg(any(test, feature = "test-helpers"))]
 pub mod test_helpers;
 

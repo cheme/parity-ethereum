@@ -25,9 +25,7 @@ extern crate parity_runtime;
 #[macro_use]
 extern crate log;
 
-#[cfg(test)]
-extern crate fake_fetch;
-
+#[cfg(not(target_arch = "wasm32"))]
 pub extern crate fetch;
 
 use std::cmp;
@@ -35,6 +33,7 @@ use std::fmt;
 use std::io;
 use std::str;
 
+#[cfg(not(target_arch = "wasm32"))]
 use fetch::{Client as FetchClient, Fetch};
 use futures::{Future, Stream};
 use futures::future::{self, Either};
@@ -55,6 +54,7 @@ pub enum Error {
 	StatusCode(&'static str),
 	/// The API returned an unexpected status content.
 	UnexpectedResponse(Option<String>),
+  #[cfg(not(target_arch = "wasm32"))]
 	/// There was an error when trying to reach the API.
 	Fetch(fetch::Error),
 	/// IO error when reading API response.
@@ -65,12 +65,21 @@ impl From<io::Error> for Error {
 	fn from(err: io::Error) -> Self { Error::Io(err) }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl From<fetch::Error> for Error {
 	fn from(err: fetch::Error) -> Self { Error::Fetch(err) }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 /// A client to get the current ETH price using an external API.
 pub struct Client<F = FetchClient> {
+	pool: Executor,
+	api_endpoint: String,
+	fetch: F,
+}
+
+#[cfg(target_arch = "wasm32")]
+pub struct Client<F> {
 	pool: Executor,
 	api_endpoint: String,
 	fetch: F,
@@ -90,6 +99,7 @@ impl<F> cmp::PartialEq for Client<F> {
 	}
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<F: Fetch> Client<F> {
 	/// Creates a new instance of the `Client` given a `fetch::Client`.
 	pub fn new(fetch: F, pool: Executor) -> Client<F> {
@@ -131,6 +141,19 @@ impl<F: Fetch> Client<F> {
 			});
 		self.pool.spawn(future)
 	}
+}
+
+#[cfg(target_arch = "wasm32")]
+impl<F> Client<F> {
+	/// Creates a new instance of the `Client` given a `fetch::Client`.
+	pub fn new(fetch: F, pool: Executor) -> Client<F> {
+    unimplemented!("wasm32");
+	}
+
+	/// Gets the current ETH price and calls `set_price` with the result.
+	pub fn get<G: FnOnce(PriceInfo) + Sync + Send + 'static>(&self, set_price: G) {
+    unimplemented!("wasm32");
+  }
 }
 
 #[cfg(test)]

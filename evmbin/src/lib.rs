@@ -59,7 +59,8 @@ use docopt::Docopt;
 use rustc_hex::FromHex;
 use ethereum_types::{U256, Address};
 use bytes::Bytes;
-use ethcore::{spec, json_tests, TrieSpec};
+use ethcore::{spec, TrieSpec};
+use ethcore::{ json_tests };
 use vm::{ActionParams, CallType};
 
 mod info;
@@ -121,7 +122,12 @@ pub fn main() {
 	panic_hook::set_abort();
 	env_logger::init();
 
-	let args: Args = Docopt::new(USAGE).and_then(|d| d.deserialize()).unwrap_or_else(|e| e.exit());
+	execute(env::args());
+}
+
+fn execute<S, I>(command: I) where I: IntoIterator<Item=S>, S: AsRef<str> {
+	let args: Args = Docopt::new(USAGE)
+		.and_then(|d| d.argv(command).deserialize()).unwrap_or_else(|e| e.exit());
 
 	if args.cmd_state_test {
 		run_state_test(args)

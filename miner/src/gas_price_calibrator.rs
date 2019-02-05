@@ -22,6 +22,7 @@ use ansi_term::Colour;
 use ethereum_types::U256;
 use parity_runtime::Executor;
 use price_info::{Client as PriceInfoClient, PriceInfo};
+#[cfg(not(target_arch = "wasm32"))]
 use price_info::fetch::Client as FetchClient;
 
 /// Options for the dynamic gas price recalibrator.
@@ -38,9 +39,11 @@ pub struct GasPriceCalibratorOptions {
 pub struct GasPriceCalibrator {
 	options: GasPriceCalibratorOptions,
 	next_calibration: Instant,
+  #[cfg(not(target_arch = "wasm32"))]
 	price_info: PriceInfoClient,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl GasPriceCalibrator {
 	/// Create a new gas price calibrator.
 	pub fn new(options: GasPriceCalibratorOptions, fetch: FetchClient, p: Executor) -> GasPriceCalibrator {

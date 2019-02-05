@@ -17,15 +17,19 @@
 //! Sends HTTP notifications to a list of URLs every time new work is available.
 
 extern crate ethash;
+#[cfg(not(target_arch = "wasm32"))]
 extern crate fetch;
 extern crate parity_runtime;
 extern crate url;
+#[cfg(not(target_arch = "wasm32"))]
 extern crate hyper;
 
+#[cfg(not(target_arch = "wasm32"))]
 use self::fetch::{Fetch, Request, Client as FetchClient, Method};
 use self::parity_runtime::Executor;
 use self::ethash::SeedHashCompute;
 use self::url::Url;
+#[cfg(not(target_arch = "wasm32"))]
 use self::hyper::header::{self, HeaderValue};
 
 use ethereum_types::{H256, U256};
@@ -42,11 +46,13 @@ pub trait NotifyWork : Send + Sync {
 /// POSTs info about new work to given urls.
 pub struct WorkPoster {
 	urls: Vec<Url>,
+  #[cfg(not(target_arch = "wasm32"))]
 	client: FetchClient,
 	executor: Executor,
 	seed_compute: Mutex<SeedHashCompute>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl WorkPoster {
 	/// Create new `WorkPoster`.
 	pub fn new(urls: &[String], fetch: FetchClient, executor: Executor) -> Self {
@@ -68,6 +74,7 @@ impl WorkPoster {
 	}
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl NotifyWork for WorkPoster {
 	fn notify(&self, pow_hash: H256, difficulty: U256, number: u64) {
 		// TODO: move this to engine
@@ -89,5 +96,11 @@ impl NotifyWork for WorkPoster {
 				warn!("Error sending HTTP notification to {} : {}, retrying", u, e);
 			}).map(|_| ()));
 		}
+	}
+}
+#[cfg(target_arch = "wasm32")]
+impl NotifyWork for WorkPoster {
+	fn notify(&self, pow_hash: H256, difficulty: U256, number: u64) {
+    unimplemented!("wasm32");
 	}
 }

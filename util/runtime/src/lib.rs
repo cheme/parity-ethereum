@@ -17,13 +17,16 @@
 //! Tokio Runtime wrapper.
 
 pub extern crate futures;
+#[cfg(not(target_arch = "wasm32"))]
 pub extern crate tokio;
 
 use std::{fmt, thread};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 use futures::{future, Future, IntoFuture};
+#[cfg(not(target_arch = "wasm32"))]
 pub use tokio::timer::Delay;
+#[cfg(not(target_arch = "wasm32"))]
 pub use tokio::runtime::{Runtime as TokioRuntime, Builder as TokioRuntimeBuilder, TaskExecutor};
 
 /// Runtime for futures.
@@ -34,6 +37,7 @@ pub struct Runtime {
 	handle: RuntimeHandle,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Runtime {
 	fn new(runtime_bldr: &mut TokioRuntimeBuilder) -> Self {
 		let mut runtime = runtime_bldr
@@ -95,6 +99,35 @@ impl Runtime {
 	}
 }
 
+#[cfg(target_arch = "wasm32")]
+impl Runtime {
+
+	/// Spawns a new tokio runtime with a default thread count on a background
+	/// thread and returns a `Runtime` which can be used to spawn tasks via
+	/// its executor.
+	pub fn with_default_thread_count() -> Self {
+    unimplemented!("wasm32");
+	}
+
+	/// Spawns a new tokio runtime with a the specified thread count on a
+	/// background thread and returns a `Runtime` which can be used to spawn
+	/// tasks via its executor.
+	pub fn with_thread_count(thread_count: usize) -> Self {
+    unimplemented!("wasm32");
+	}
+
+	/// Returns this runtime raw executor.
+	///
+	/// Deprecated: Exists only to connect with current JSONRPC implementation.
+	pub fn raw_executor(&self) -> TaskExecutor {
+    unimplemented!("wasm32");
+	}
+
+	/// Returns runtime executor.
+	pub fn executor(&self) -> Executor {
+    unimplemented!("wasm32");
+	}
+}
 #[derive(Clone)]
 enum Mode {
 	Tokio(TaskExecutor),
@@ -114,6 +147,7 @@ impl fmt::Debug for Mode {
 	}
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 /// Returns a future which runs `f` until `duration` has elapsed, at which
 /// time `on_timeout` is run and the future resolves.
 fn timeout<F, R, T>(f: F, duration: Duration, on_timeout: T)
@@ -132,6 +166,25 @@ where
 		});
 	future.select(timeout).then(|_| Ok(()))
 }
+
+#[cfg(target_arch = "wasm32")]
+fn timeout<F, R, T>(f: F, duration: Duration, on_timeout: T)
+	-> impl Future<Item = (), Error = ()> + Send + 'static
+where
+	T: FnOnce() -> () + Send + 'static,
+	F: FnOnce() -> R + Send + 'static,
+	R: IntoFuture<Item=(), Error=()> + Send + 'static,
+	R::Future: Send + 'static,
+{
+  unimplemented!("wasm32");
+	future::ok(())
+}
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Debug, Clone)]
+pub struct TaskExecutor { }
+
+
 
 #[derive(Debug, Clone)]
 pub struct Executor {
@@ -162,6 +215,7 @@ impl Executor {
 		}
 	}
 
+  #[cfg(not(target_arch = "wasm32"))]
 	/// Spawn a future to this runtime
 	pub fn spawn<R>(&self, r: R) where
 		R: IntoFuture<Item=(), Error=()> + Send + 'static,
@@ -180,6 +234,15 @@ impl Executor {
 		}
 	}
 
+  #[cfg(target_arch = "wasm32")]
+	pub fn spawn<R>(&self, r: R) where
+		R: IntoFuture<Item=(), Error=()> + Send + 'static,
+		R::Future: Send + 'static,
+	{
+    unimplemented!("wasm32");
+  }
+	
+  #[cfg(not(target_arch = "wasm32"))]
 	/// Spawn a new future returned by given closure.
 	pub fn spawn_fn<F, R>(&self, f: F) where
 		F: FnOnce() -> R + Send + 'static,
@@ -199,7 +262,16 @@ impl Executor {
 		}
 	}
 
-	/// Spawn a new future and wait for it or for a timeout to occur.
+  #[cfg(target_arch = "wasm32")]
+  pub fn spawn_fn<F, R>(&self, f: F) where
+		F: FnOnce() -> R + Send + 'static,
+		R: IntoFuture<Item=(), Error=()> + Send + 'static,
+		R::Future: Send + 'static,
+	{
+    unimplemented!("wasm32");
+  }
+
+  #[cfg(not(target_arch = "wasm32"))]
 	pub fn spawn_with_timeout<F, R, T>(&self, f: F, duration: Duration, on_timeout: T) where
 		T: FnOnce() -> () + Send + 'static,
 		F: FnOnce() -> R + Send + 'static,
@@ -220,8 +292,19 @@ impl Executor {
 			},
 		}
 	}
+
+  #[cfg(target_arch = "wasm32")]
+	pub fn spawn_with_timeout<F, R, T>(&self, f: F, duration: Duration, on_timeout: T) where
+		T: FnOnce() -> () + Send + 'static,
+		F: FnOnce() -> R + Send + 'static,
+		R: IntoFuture<Item=(), Error=()> + Send + 'static,
+		R::Future: Send + 'static,
+	{
+    unimplemented!("wasm32");
+  }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<F: Future<Item = (), Error = ()> + Send + 'static> future::Executor<F> for Executor {
 	fn execute(&self, future: F) -> Result<(), future::ExecuteError<F>> {
 		match self.inner {
@@ -239,6 +322,15 @@ impl<F: Future<Item = (), Error = ()> + Send + 'static> future::Executor<F> for 
 		}
 	}
 }
+
+#[cfg(target_arch = "wasm32")]
+impl<F: Future<Item = (), Error = ()> + Send + 'static> future::Executor<F> for Executor {
+	fn execute(&self, future: F) -> Result<(), future::ExecuteError<F>> {
+    unimplemented!("wasm32");
+	}
+}
+
+
 
 /// A handle to a runtime. Dropping the handle will cause runtime to shutdown.
 pub struct RuntimeHandle {

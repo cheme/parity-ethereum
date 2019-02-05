@@ -1,10 +1,12 @@
-cargo build --target wasm32-unknown-unknown 
+#cargo build --target wasm32-unknown-unknown --no-default-features
 ln -s ../target
-wasm-pack build --target browser
+wasm-pack build --target browser #-- --no-default-features
 sed -i '/function getUint8Memory/ c\export function getUint8Memory() {' ./pkg/evmbin.js
-rm  ./target
+rm ./target
 cd pkg
-#npm install webpack webpack-cli --save-dev
+cp -rf ./env ./node_modules/
+cp ./package.json_ok ./package.json
+#npm install
 npx webpack
 cd dist
 
