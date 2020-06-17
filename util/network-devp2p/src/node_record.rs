@@ -1,7 +1,6 @@
 use log::*;
 use parity_crypto::publickey::Secret;
 use std::path::PathBuf;
-use std::pin::Pin;
 use crate::{persistence::{save, load, DiskEntity}, node_table::NodeEndpoint};
 
 pub type Enr = enr::Enr<secp256k1::SecretKey>;
@@ -9,7 +8,7 @@ pub type Enr = enr::Enr<secp256k1::SecretKey>;
 const ENR_VERSION: &str = "v4";
 
 pub struct EnrManager {
-	secret: Pin<Box<secp256k1::SecretKey>>,
+	secret: Box<ZeroizeSecretKey>,
 	inner: Enr,
 	path: Option<PathBuf>,
 }
@@ -22,10 +21,10 @@ impl EnrManager {
 	}
 
 	pub fn new(path: Option<PathBuf>, key: Secret, seq: u64) -> Option<Self> {
-		let secret = Pin::new(Box::new(key.to_secp256k1_secret().ok()?));
+		let secret = Box::new(ZeroizeSecretKey(key.to_secp256k1_secret().ok()?));
 		let mut b = enr::EnrBuilder::new(ENR_VERSION);
 		b.seq(seq);
-		let inner = b.build(&*secret).ok()?;
+		let inner = b.build(&secret.0).ok()?;
 		let mut this = Self { secret, inner, path };
 		this.save();
 		Some(this)
@@ -37,7 +36,7 @@ impl EnrManager {
 	{
 		let path = PathBuf::from(path);
 		let inner = load::<Enr>(&path)?;
-		let secret = Pin::new(Box::new(key.to_secp256k1_secret().ok()?));
+		let secret = Box::new(ZeroizeSecretKey(key.to_secp256k1_secret().ok()?));
 		let public = secp256k1::PublicKey::from_secret_key(&secp256k1::Secp256k1::new(), &secret);
 
 		if inner.public_key() != public {
@@ -90,15 +89,35 @@ impl DiskEntity for Enr {
 impl Drop for EnrManager {
 	fn drop(&mut self) {
 		use zeroize::Zeroize;
-		let secret_key: &[u8] = &self.secret[..];
-		// unsafe cast since IndexMut is not implemented
-		unsafe {
-			#[allow(mutable_transmutes)]
-			let secret_key_mut: &mut[u8] = std::mem::transmute(secret_key);
-			secret_key_mut.zeroize();
-		}
+		self.secret.zeroize();
 	}
 }
+
+/// A wrapper type around `SecretKey` to prevent leaking secret key data. This
+/// type will properly zeroize the secret key to `ONE_KEY` in a way that will
+/// not get optimized away by the compiler nor be prone to leaks that take
+/// advantage of access reordering.
+///
+/// This is required since the `SignTransactionFuture` needs to retain a copy
+/// of the `SecretKey`.
+#[derive(Clone, Copy)]
+struct ZeroizeSecretKey(secp256k1::SecretKey);
+
+impl Default for ZeroizeSecretKey {
+	fn default() -> Self {
+		ZeroizeSecretKey(secp256k1::key::ONE_KEY)
+	}
+}
+
+impl std::ops::Deref for ZeroizeSecretKey {
+	type Target = secp256k1::SecretKey;
+
+	fn deref(&self) -> &Self::Target {
+		&self.0
+	}
+}
+
+impl zeroize::DefaultIsZeroes for ZeroizeSecretKey {}
 
 #[cfg(test)]
 mod tests {
