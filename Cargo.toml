@@ -131,3 +131,6 @@ members = [
 	"ethcore/wasm/run",
 	"evmbin",
 ]
+
+[patch.crates-io]
+parity-crypto = { git = "https://github.com/cheme/parity-common", branch = "mem_rep" }

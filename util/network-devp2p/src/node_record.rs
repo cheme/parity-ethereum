@@ -1,6 +1,7 @@
 use log::*;
 use parity_crypto::publickey::Secret;
 use std::path::PathBuf;
+use std::pin::Pin;
 use crate::{persistence::{save, load, DiskEntity}, node_table::NodeEndpoint};
 
 pub type Enr = enr::Enr<secp256k1::SecretKey>;
@@ -8,7 +9,7 @@ pub type Enr = enr::Enr<secp256k1::SecretKey>;
 const ENR_VERSION: &str = "v4";
 
 pub struct EnrManager {
-	secret: secp256k1::SecretKey,
+	secret: Pin<Box<secp256k1::SecretKey>>,
 	inner: Enr,
 	path: Option<PathBuf>,
 }
@@ -21,10 +22,10 @@ impl EnrManager {
 	}
 
 	pub fn new(path: Option<PathBuf>, key: Secret, seq: u64) -> Option<Self> {
-		let secret = key.to_secp256k1_secret().ok()?;
+		let secret = Pin::new(Box::new(key.to_secp256k1_secret().ok()?));
 		let mut b = enr::EnrBuilder::new(ENR_VERSION);
 		b.seq(seq);
-		let inner = b.build(&secret).ok()?;
+		let inner = b.build(&*secret).ok()?;
 		let mut this = Self { secret, inner, path };
 		this.save();
 		Some(this)
@@ -36,7 +37,7 @@ impl EnrManager {
 	{
 		let path = PathBuf::from(path);
 		let inner = load::<Enr>(&path)?;
-		let secret = key.to_secp256k1_secret().ok()?;
+		let secret = Pin::new(Box::new(key.to_secp256k1_secret().ok()?));
 		let public = secp256k1::PublicKey::from_secret_key(&secp256k1::Secp256k1::new(), &secret);
 
 		if inner.public_key() != public {
@@ -69,7 +70,7 @@ impl EnrManager {
 
 	#[cfg(test)]
 	pub fn into_enr(self) -> Enr {
-		self.inner
+		self.inner.clone()
 	}
 }
 
@@ -83,6 +84,19 @@ impl DiskEntity for Enr {
 
 	fn from_repr(s: &str) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
 		Ok(s.parse()?)
+	}
+}
+
+impl Drop for EnrManager {
+	fn drop(&mut self) {
+		use zeroize::Zeroize;
+		let secret_key: &[u8] = &self.secret[..];
+		// unsafe cast since IndexMut is not implemented
+		unsafe {
+			#[allow(mutable_transmutes)]
+			let secret_key_mut: &mut[u8] = std::mem::transmute(secret_key);
+			secret_key_mut.zeroize();
+		}
 	}
 }
 
