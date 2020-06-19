@@ -14,6 +14,8 @@ pub trait DiskEntity: Sized {
 	const FILENAME: &'static str;
 	/// Description of what kind of data that is stored in the file
 	const DESCRIPTION: &'static str;
+	/// Indicate if value is secret
+	const SECRET: bool = false;
 
 	/// Convert to string representation that will be written to disk.
 	fn to_repr(&self) -> String;
@@ -25,6 +27,7 @@ pub trait DiskEntity: Sized {
 impl DiskEntity for Secret {
 	const FILENAME: &'static str = "key";
 	const DESCRIPTION: &'static str = "node key";
+	const SECRET: bool = true;
 
 	fn to_repr(&self) -> String {
 		self.to_hex()
@@ -54,7 +57,14 @@ pub(crate) fn save<E: DiskEntity>(path: &Path, entity: &E) {
 	if let Err(e) = restrict_permissions_owner(path, true, false) {
 		warn!("Failed to modify permissions of the file ({})", e);
 	}
-	if let Err(e) = file.write(&entity.to_repr().into_bytes()) {
+	let mut repr = entity.to_repr().into_bytes();
+	let result = file.write(&repr);
+	if E::SECRET {
+		use zeroize::Zeroize;
+		repr.zeroize();
+	}
+
+	if let Err(e) = result {
 		warn!("Failed to persist {} to disk: {:?}", E::DESCRIPTION, e);
 	}
 }
@@ -67,9 +77,13 @@ where
 	let mut path_buf = PathBuf::from(path);
 	path_buf.push(E::FILENAME);
 
-	let buf = std::fs::read_to_string(path_buf).map_err(|e| warn!("Error reading {}: {:?}", E::DESCRIPTION, e)).ok()?;
+	let mut buf = std::fs::read_to_string(path_buf).map_err(|e| warn!("Error reading {}: {:?}", E::DESCRIPTION, e)).ok()?;
 
 	let data = E::from_repr(&buf).map_err(|e| warn!("Error parsing {}: {:?}", E::DESCRIPTION, e)).ok()?;
+	if E::SECRET {
+		use zeroize::Zeroize;
+		buf.zeroize();
+	}
 
 	Some(data)
 }

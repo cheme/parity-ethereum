@@ -1480,6 +1480,7 @@ dependencies = [
  "snap",
  "tempfile",
  "tiny-keccak 2.0.2",
+ "zeroize",
 ]
 
 [[package]]
