@@ -460,9 +460,9 @@ impl<C> Service<C> where C: SnapshotClient + ChainInfo {
 
 			// Writing changes to DB and logging every now and then
 			if block_number % 1_000 == 0 {
-				next_db.key_value().write_buffered(batch);
+				next_db.key_value().write(batch)?;
 				next_chain.commit();
-				next_db.key_value().flush().expect("DB flush failed.");
+// TODO seems to break rollback				next_db.key_value().flush().expect("DB flush failed.");
 				batch = DBTransaction::new();
 
 				if block_number % 10_000 == 0 {
@@ -472,9 +472,9 @@ impl<C> Service<C> where C: SnapshotClient + ChainInfo {
 		}
 
 		// Final commit to the DB
-		next_db.key_value().write_buffered(batch);
+		next_db.key_value().write(batch)?;
 		next_chain.commit();
-		next_db.key_value().flush().expect("DB flush failed.");
+// TODO seems to break rollback		next_db.key_value().flush().expect("DB flush failed.");
 
 		// Update best ancient block in the Next Chain
 		next_chain.update_best_ancient_block(&start_hash);
@@ -786,7 +786,7 @@ impl<C> Service<C> where C: SnapshotClient + ChainInfo {
 
 							match is_done {
 								true => {
-									db.key_value().flush()?;
+									// TODO seems to break roll back db.key_value().flush()?;
 									drop(db);
 									return self.finalize_restoration(&mut *restoration);
 								},
@@ -801,7 +801,7 @@ impl<C> Service<C> where C: SnapshotClient + ChainInfo {
 		};
 
 		result?;
-		db.key_value().flush()?;
+// TODO breaks tx logic	db.key_value().flush()?;
 		Ok(())
 	}
 

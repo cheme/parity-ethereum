@@ -16,12 +16,12 @@ hash-db = "0.15.0"
 journaldb = { path = "../../util/journaldb" }
 keccak-hash = "0.5.0"
 keccak-hasher = { path = "../../util/keccak-hasher" }
-kvdb = "0.5.0"
+kvdb = "0.7.0"
 log = "0.4"
 lru-cache = "0.1.2"
-memory-db = "0.20.0"
+memory-db = "0.21.0"
 parity-bytes = "0.1.0"
-parity-util-mem = "0.6.0"
+parity-util-mem = "0.7.0"
 parking_lot = "0.10.0"
 pod = { path = "../pod" }
 rlp = "0.4.5"

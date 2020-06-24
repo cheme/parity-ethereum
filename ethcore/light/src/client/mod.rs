@@ -346,14 +346,15 @@ impl<T: ChainDataFetcher> Client<T> {
 				}
 			};
 
-			self.db.write_buffered(tx);
+			self.db.write(tx)
+				.expect("TODO refact for error");
 			self.chain.apply_pending(pending);
 		}
-
+/* TODO rewrite tx logic
 		if let Err(e) = self.db.flush() {
 			panic!("Database flush failed: {}. Check disk health and space.", e);
 		}
-
+*/
 		self.queue.mark_as_bad(&bad);
 		self.queue.mark_as_good(&good);
 
@@ -510,7 +511,8 @@ impl<T: ChainDataFetcher> Client<T> {
 		self.chain.insert_pending_transition(&mut batch, header.hash(), &PendingTransition {
 			proof,
 		});
-		self.db.write_buffered(batch);
+		self.db.write(batch)
+			.expect("TODO manage error");
 		Ok(())
 	}
 }

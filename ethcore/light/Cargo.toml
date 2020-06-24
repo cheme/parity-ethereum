@@ -18,14 +18,14 @@ ethcore-blockchain = { path = "../blockchain" }
 ethereum-types = "0.9.0"
 executive-state = { path = "../executive-state" }
 machine = { path = "../machine" }
-memory-db = "0.20.0"
+memory-db = "0.21.0"
 trie-db = "0.20.0"
 patricia-trie-ethereum = { path = "../../util/patricia-trie-ethereum" }
 ethcore-network = { path = "../../util/network" }
 ethcore-miner = { path = "../../miner" }
 ethcore-io = { path = "../../util/io" }
 hash-db = "0.15.0"
-parity-util-mem = "0.6.0"
+parity-util-mem = "0.7.0"
 vm = { path = "../vm" }
 fastmap = { path = "../../util/fastmap" }
 failsafe = { version = "0.3.0", default-features = false, features = ["parking_lot_mutex"] }
@@ -43,14 +43,14 @@ stats = { path = "../../util/stats" }
 keccak-hash = "0.5.0"
 keccak-hasher = { path = "../../util/keccak-hasher" }
 triehash-ethereum = { version = "0.2",  path = "../../util/triehash-ethereum" }
-kvdb = "0.5.0"
+kvdb = "0.7.0"
 memory-cache = { path = "../../util/memory-cache" }
 journaldb = { path = "../../util/journaldb" }
 verification = { path = "../verification" }
 
 [dev-dependencies]
 ethcore = { path = "..", features = ["test-helpers"] }
-kvdb-memorydb = "0.5.0"
+kvdb-memorydb = "0.7.0"
 tempfile = "3.1"
 
 [features]
